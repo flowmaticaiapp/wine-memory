@@ -4,10 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 
-import { T, SEED, autoEnrich, newSavedPairing, newDiningExperience } from './lib/data.js';
+import { T, autoEnrich, newDiningExperience } from './lib/data.js';
 import { Icon } from './components/ui.jsx';
 import { IOSDevice } from './components/IOSFrame.jsx';
-import { useTweaks, TweaksPanel, TweakSection, TweakRadio } from './components/TweaksPanel.jsx';
+import { useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakButton } from './components/TweaksPanel.jsx';
 import { HomeScreen } from './components/home.jsx';
 import { Collection, VisualDetail } from './components/visual.jsx';
 import { PalateScreen } from './components/palate.jsx';
@@ -17,6 +17,9 @@ import { SnapLabel } from './components/snap.jsx';
 import { ScanBottles } from './components/scan.jsx';
 import { PairingSearch } from './components/pairing.jsx';
 import { DiningOut } from './components/diningout.jsx';
+import { supabase, supabaseConfigured } from './lib/supabase.js';
+import * as db from './lib/db.js';
+import { AuthScreen, FullScreenLoader, signOut } from './components/Auth.jsx';
 
 const VTWEAKS = {
   columns: '2',
@@ -63,9 +66,10 @@ function useDeviceFit(){
   },[]);
 }
 
-function VApp(){
+function VApp({ session }){
+  const userId = session.user.id;
   const [t,setTweak]=useTweaks(VTWEAKS);
-  const [wines,setWines]=useState(SEED);
+  const [wines,setWines]=useState(null);   // null = loading
   const [pairings,setPairings]=useState([]);
   const [dining,setDining]=useState([]);
   const [tab,setTab]=useState('home');
@@ -77,27 +81,39 @@ function VApp(){
   useDeviceFit();
   const flash=(m)=>{ setToast(m); setTimeout(()=>setToast(null),2200); };
 
+  // load this user's cellar + pairings
+  useEffect(()=>{ let on=true;
+    (async()=>{ try{
+      const [ws,ps] = await Promise.all([db.fetchWines(), db.fetchPairings()]);
+      if(on){ setWines(ws); setPairings(ps); }
+    }catch(e){ console.error('Load failed', e); if(on){ setWines([]); flash('Could not load your cellar'); } } })();
+    return ()=>{ on=false; };
+  },[]);
+
   const cols = t.columns==='3'?3:2;
-  const updateWine=(id,patch)=> setWines(ws=>ws.map(w=>w.id===id?{...w,...patch}:w));
-  const addWine=(w)=>{ setWines(ws=>[autoEnrich(w),...ws]); setOverlay(null); flash('Added to your collection'); };
-  const addMany=(arr)=>{ setWines(ws=>[...arr.map(autoEnrich),...ws]); };
-  const scanAdd=(arr)=>{ addMany(arr); setOverlay(null); setTab('collection'); setFilter('totry'); flash(`${arr.length} ${arr.length===1?'wine':'wines'} added to To Try`); };
+  const loading = wines===null;
+  const updateWine=(id,patch)=>{ setWines(ws=>ws.map(w=>w.id===id?{...w,...patch}:w)); db.updateWine(id,patch).catch(e=>console.error('Update failed', e)); };
+  const addWine=async(w)=>{ try{ const saved=await db.insertWine(userId, autoEnrich(w)); setWines(ws=>[saved,...ws]); setOverlay(null); flash('Added to your collection'); }catch(e){ console.error(e); flash('Could not save'); } };
+  const addMany=async(arr)=>{ const saved=await db.insertWines(userId, arr.map(autoEnrich)); setWines(ws=>[...saved,...ws]); return saved; };
+  const scanAdd=async(arr)=>{ try{ await addMany(arr); setOverlay(null); setTab('collection'); setFilter('totry'); flash(`${arr.length} ${arr.length===1?'wine':'wines'} added to To Try`); }catch(e){ console.error(e); flash('Could not save'); } };
   const viewToTry=()=>{ setOverlay(null); setTab('collection'); setFilter('totry'); };
-  const clearSamples=()=>{ setWines(ws=>ws.filter(w=>!w.sample)); };
+  const clearSamples=async()=>{ try{ await db.deleteSamples(); setWines(ws=>ws.filter(w=>!w.sample)); }catch(e){ console.error(e); } };
   const ask=(q)=>{ setSeed(q||''); setOverlay('search'); };
   const explore=(r)=>{ setExploreRegion(r); setOverlay('explore'); };
-  const savePairing=(p)=>{ setPairings(ps=>[newSavedPairing(p),...ps]); flash('Saved to My Palate'); };
-  const saveDining=({experience,pairing})=>{ setDining(ds=>[newDiningExperience(experience),...ds]); if(pairing) setPairings(ps=>[newSavedPairing(pairing),...ps]); };
+  const savePairing=async(p)=>{ try{ const sp=await db.insertPairing(userId,p); setPairings(ps=>[sp,...ps]); flash('Saved to My Palate'); }catch(e){ console.error(e); } };
+  const saveDining=async({experience,pairing})=>{ setDining(ds=>[newDiningExperience(experience),...ds]); if(pairing){ try{ const sp=await db.insertPairing(userId,pairing); setPairings(ps=>[sp,...ps]); }catch(e){ console.error(e); } } };
 
-  const detail = (overlay&&overlay.detail)? wines.find(w=>w.id===overlay.detail):null;
+  const detail = (overlay&&overlay.detail&&wines)? wines.find(w=>w.id===overlay.detail):null;
   const fullPanel = ['searchadd','import','search','diningout','snap','scan'].includes(overlay);
-  const hasSamples = wines.some(w=>w.sample);
+  const hasSamples = wines? wines.some(w=>w.sample) : false;
 
   return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:14, boxSizing:'border-box', background:T.canvas }}>
       <div id="wm-device">
       <IOSDevice width={393} height={852} dark={false}>
         <div style={{ position:'relative', height:'100%', width:'100%', background:'#fff', overflow:'hidden' }}>
+          {loading && <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}><svg width={30} height={30} viewBox="0 0 24 24" style={{ animation:'wmSpin .8s linear infinite' }}><circle cx="12" cy="12" r="9" fill="none" stroke={T.line2} strokeWidth="2.6"/><path d="M21 12a9 9 0 00-9-9" fill="none" stroke={T.ink} strokeWidth="2.6" strokeLinecap="round"/></svg></div>}
+          {!loading && <>
           {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onShopping={()=>setOverlay('addhub')} onHome={()=>ask('')} onDiningOut={()=>setOverlay('diningout')} onExplore={()=>setTab('learn')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')}/>}
           {tab==='collection' && <Collection wines={wines} cols={cols} filter={filter} setFilter={setFilter} hasSamples={hasSamples} onClearSamples={clearSamples} onOpen={(id)=>setOverlay({detail:id})} onSearch={()=>ask('')}/>}
           {tab==='palate' && <PalateScreen wines={wines} pairings={pairings} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask}/>}
@@ -113,6 +129,7 @@ function VApp(){
           {overlay==='search' && <PairingSearch wines={wines} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
           {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining}/>}
           {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} verdictVariant={t.verdictStyle}/>}
+          </>}
 
           <VToast toast={toast}/>
         </div>
@@ -125,6 +142,9 @@ function VApp(){
         <TweakRadio label="Columns" value={t.columns} options={['2','3']} onChange={(v)=>setTweak('columns',v)} />
         <TweakSection label="Verdict style" />
         <TweakRadio label="Buy / Maybe / No UI" value={t.verdictStyle} options={['expressive','subtle','glyph']} onChange={(v)=>setTweak('verdictStyle',v)} />
+        <TweakSection label="Account" />
+        <div style={{ fontSize:11, color:'rgba(41,38,27,.6)', wordBreak:'break-all' }}>{session.user.email}</div>
+        <TweakButton label="Sign out" secondary onClick={signOut} />
       </TweaksPanel>
     </div>
   );
@@ -145,4 +165,21 @@ function TweaksToggle(){
   );
 }
 
-createRoot(document.getElementById('root')).render(<VApp/>);
+// Auth gate: checking → loader, no session → sign-in, session → the app.
+function Root(){
+  const [session,setSession]=useState(undefined); // undefined = checking
+  useEffect(()=>{
+    if(!supabaseConfigured){ setSession(null); return; }
+    supabase.auth.getSession().then(({data})=>setSession(data.session));
+    const { data:sub } = supabase.auth.onAuthStateChange((_e,s)=>setSession(s));
+    return ()=> sub.subscription.unsubscribe();
+  },[]);
+  if(session===undefined) return <FullScreenLoader/>;
+  if(!session) return <AuthScreen/>;
+  return <VApp key={session.user.id} session={session}/>;
+}
+
+// Reuse the root across HMR re-executions so dev hot-reload doesn't re-call createRoot.
+const _container = document.getElementById('root');
+const _root = (window.__wmRoot ||= createRoot(_container));
+_root.render(<Root/>);

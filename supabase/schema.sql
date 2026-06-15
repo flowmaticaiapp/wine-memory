@@ -1,0 +1,81 @@
+-- Wine Memory — Supabase schema (minimal).
+-- Run once in the Supabase SQL Editor (Dashboard → SQL → New query → paste → Run).
+-- Covers: user-specific wines + pairings, RLS isolation, and a bottle-photos bucket.
+-- My Palate is DERIVED in the client from wines + pairings — no table here by design.
+
+-- ── wines ───────────────────────────────────────────────────────────
+create table if not exists public.wines (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null default auth.uid() references auth.users on delete cascade,
+  producer   text,
+  name       text not null,
+  vintage    text,                         -- text so 'NV' is allowed
+  type       text,
+  grape      text,
+  region     text,
+  country    text,
+  loc        jsonb,                         -- [lng, lat]
+  verdict    text check (verdict in ('buy','maybe','no','totry')),
+  tags       text[] default '{}',
+  note       text,
+  "where"    text,
+  source     text,
+  price      numeric,
+  photo      text,                          -- Storage URL, nullable (honest imagery)
+  family     text,
+  flavor     jsonb,                          -- {body,acidity,tannin,fruit,oak}
+  pairings   text[] default '{}',
+  sample     boolean default false,
+  added      date default current_date,
+  created_at timestamptz default now()
+);
+create index if not exists wines_user_idx on public.wines (user_id, created_at desc);
+
+-- ── pairings (My Favorite Pairings / pairing history) ───────────────
+create table if not exists public.pairings (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null default auth.uid() references auth.users on delete cascade,
+  dish       text,
+  style      text,
+  why        text,
+  type       text,
+  wine_id    uuid references public.wines on delete set null,  -- related_saved_wine_id
+  created_at timestamptz default now()
+);
+create index if not exists pairings_user_idx on public.pairings (user_id, created_at desc);
+
+-- ── Row Level Security — each user sees only their own rows ──────────
+alter table public.wines    enable row level security;
+alter table public.pairings enable row level security;
+
+drop policy if exists "own rows" on public.wines;
+create policy "own rows" on public.wines for all
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+drop policy if exists "own rows" on public.pairings;
+create policy "own rows" on public.pairings for all
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- ── Storage: bottle photos ──────────────────────────────────────────
+-- Public-read bucket (label photos aren't sensitive); writes scoped to the
+-- user's own folder:  bottle-photos/{user_id}/{file}.jpg
+insert into storage.buckets (id, name, public)
+values ('bottle-photos', 'bottle-photos', true)
+on conflict (id) do nothing;
+
+drop policy if exists "photos public read"   on storage.objects;
+drop policy if exists "photos own insert"     on storage.objects;
+drop policy if exists "photos own update"     on storage.objects;
+drop policy if exists "photos own delete"     on storage.objects;
+
+create policy "photos public read" on storage.objects for select
+  using (bucket_id = 'bottle-photos');
+
+create policy "photos own insert" on storage.objects for insert
+  with check (bucket_id = 'bottle-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy "photos own update" on storage.objects for update
+  using (bucket_id = 'bottle-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy "photos own delete" on storage.objects for delete
+  using (bucket_id = 'bottle-photos' and (storage.foldername(name))[1] = auth.uid()::text);
