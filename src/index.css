@@ -1,0 +1,21 @@
+:root{
+  --sans: "Archivo", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --serif: "Newsreader", Georgia, "Times New Roman", serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; background:#efece5; }
+#root h1{ font-family:var(--serif); font-weight:500; letter-spacing:-0.01em; }
+body{ font-family:var(--sans); -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+#root, #root *{ font-family:var(--sans); }
+#root ::-webkit-scrollbar{ width:0; height:0; display:none; }
+#root *{ scrollbar-width:none; }
+button{ font-family:var(--sans); }
+input, textarea{ font-family:var(--sans); }
+textarea::placeholder, input::placeholder{ color:#9a9aa1; }
+#wm-device{ transform-origin:center center; }
+
+@keyframes wmSpin{ to{ transform:rotate(360deg); } }
+@keyframes wmShimmer{ 0%{ background-position:200% 0; } 100%{ background-position:-200% 0; } }
+@keyframes wmSlideUp{ from{ transform:translateY(14px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+@keyframes wmToast{ from{ transform:translate(-50%,8px); opacity:0; } to{ transform:translate(-50%,0); opacity:1; } }
