@@ -8,8 +8,31 @@ import { T, EATING_EXAMPLES, parseOrder } from '../lib/data.js';
 import { Icon, typeColor } from './ui.jsx';
 import { Panel, Spinner } from './add.jsx';
 import { heuristicPairing } from './pairing.jsx';
+import { supabase } from '../lib/supabase.js';
 
 const { useState: dUS, useRef: dUR } = React;
+
+// Normalize any picked photo (incl. iOS HEIC, which Safari can decode) to a
+// downscaled JPEG data URL — keeps the upload small/fast and in a format Claude
+// vision accepts.
+function fileToJpegDataUrl(file, maxDim = 1600, quality = 0.82){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.naturalWidth, h = img.naturalHeight;
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      w = Math.max(1, Math.round(w * scale)); h = Math.max(1, Math.round(h * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read image')); };
+    img.src = url;
+  });
+}
 
 // match parsed restaurant-list wines to a recommended style (by grape/type)
 function matchListToStyle(list, matchGrapes, avoid){
@@ -21,17 +44,20 @@ function matchListToStyle(list, matchGrapes, avoid){
 }
 
 async function diningRecommend(dish, list){
-  // style guidance, collection-free
-  let out;
-  if (window.claude && window.claude.complete){
-    try {
+  // style guidance, collection-free — AI via the dining-recommend Edge Function,
+  // with a local heuristic fallback if it's unavailable or errors.
+  let out = null;
+  try {
+    if (supabase){
       const listForAI = (list||[]).map(w=>({ name:w.name, grape:w.grape||'', price:w.price }));
-      const prompt = `You are a sommelier helping someone choose wine to ORDER at a restaurant. Do NOT reference any home collection.\nDish: "${dish}"\nRestaurant wine list (may be empty): ${JSON.stringify(listForAI)}\n\nRecommend a human-friendly STYLE (grape) for the dish, why it works in plain language, a region to look for, and 2 other styles. If the wine list is non-empty, also pick the single best matching wine ON THE LIST (by name) and say why; if nothing fits, say so.\nFor delicate/creamy/herb dishes prefer light, high-acid styles; avoid heavy reds unless it's rich red meat.\nRespond ONLY JSON: {"dish":"","primary":{"grape":"","why":"","deeperTitle":"","deeper":"","matchGrapes":[""]},"others":[{"grape":"","why":""},{"grape":"","why":""}],"listPickName":"<name from list or null>","listPickWhy":""}`;
-      const parsed = JSON.parse((await window.claude.complete(prompt)).match(/\{[\s\S]*\}/)[0]);
-      out = { dish:parsed.dish||dish, primary:parsed.primary, others:parsed.others||[], avoid:[],
-why:parsed.primary.why, listPickName:parsed.listPickName||null, listPickWhy:parsed.listPickWhy||'' };
-    } catch(e){ out = null; }
-  }
+      const { data, error } = await supabase.functions.invoke('dining-recommend', { body:{ dish, list:listForAI } });
+      if (error) throw error;
+      if (data && data.primary){
+        out = { dish:data.dish||dish, primary:data.primary, others:data.others||[], avoid:[],
+          why:data.primary.why, listPickName:data.listPickName||null, listPickWhy:data.listPickWhy||'' };
+      }
+    }
+  } catch(e){ console.error('dining-recommend failed', e); out = null; }
   if (!out){
     const h = heuristicPairing(dish);
     out = { dish:h.dish, primary:h.primary, others:h.others, avoid:h.avoid||[], listPickName:null, listPickWhy:'' };
@@ -42,13 +68,13 @@ why:parsed.primary.why, listPickName:parsed.listPickName||null, listPickWhy:pars
   return out;
 }
 
-function PhotoTile({ label, sub, filled, onClick }){
+function PhotoTile({ label, sub, filled, busy, onClick }){
   return (
-    <button onClick={onClick} style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8, padding:'18px 12px', borderRadius:14, cursor:'pointer',
+    <button onClick={onClick} disabled={busy} style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8, padding:'18px 12px', borderRadius:14, cursor:busy?'default':'pointer',
       border:`1.5px dashed ${filled?T.buy:T.line2}`, background:filled?T.buyBg:T.canvas }}>
-      <Icon name={filled?'check':'camera'} size={22} color={filled?T.buy:T.ink3} stroke={filled?2.6:1.7}/>
-      <span style={{ fontSize:13, fontWeight:640, color:filled?T.buy:T.ink }}>{filled?'Photo added':label}</span>
-      {!filled && <span style={{ fontSize:11.5, color:T.ink3, textAlign:'center' }}>{sub}</span>}
+      {busy ? <Spinner size={22} stroke={2.4}/> : <Icon name={filled?'check':'camera'} size={22} color={filled?T.buy:T.ink3} stroke={filled?2.6:1.7}/>}
+      <span style={{ fontSize:13, fontWeight:640, color:filled?T.buy:T.ink }}>{busy?'Reading…':(filled?'Photo added':label)}</span>
+      {!filled && !busy && <span style={{ fontSize:11.5, color:T.ink3, textAlign:'center' }}>{sub}</span>}
     </button>
   );
 }
@@ -59,14 +85,55 @@ function DiningOut({ onClose, onSave }){
   const [dish, setDish] = dUS('');
   const [menuPhoto, setMenuPhoto] = dUS(false);
   const [listPhoto, setListPhoto] = dUS(false);
+  const [menuBusy, setMenuBusy] = dUS(false);
+  const [listBusy, setListBusy] = dUS(false);
+  const [photoErr, setPhotoErr] = dUS('');    // '' | 'menu' | 'winelist'
+  const [dishes, setDishes] = dUS([]);        // dish names read from a menu photo
   const [listText, setListText] = dUS('');
   const [showPaste, setShowPaste] = dUS(false);
   const [list, setList] = dUS([]);            // parsed restaurant wine list
   const [rec, setRec] = dUS(null);
   const [saved, setSaved] = dUS(false);
   const timer = dUR(null);
+  const menuInputRef = dUR(null);
+  const listInputRef = dUR(null);
 
   const parsedFromText = ()=>{ const p = parseOrder(listText); setList(p); return p; };
+
+  // Photo → downscaled JPEG → menu-vision Edge Function (Claude vision OCR) →
+  // dish names (menu) or parsed wines (wine list), fed into the recommend flow.
+  const onPhoto = async (e, kind)=>{
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';                       // allow re-picking the same file
+    if (!file) return;
+    const isWine = kind === 'winelist';
+    setPhotoErr('');
+    isWine ? setListBusy(true) : setMenuBusy(true);
+    try {
+      if (!supabase) throw new Error('not configured');
+      const image = await fileToJpegDataUrl(file);
+      const { data, error } = await supabase.functions.invoke('menu-vision', { body:{ image, kind } });
+      if (error) throw error;
+      if (isWine){
+        const wines = (data?.wines || [])
+          .map(w=>({ name:(w.name||'').trim(), grape:w.grape||'', vintage:w.vintage||'', price:(w.price!=null?w.price:null) }))
+          .filter(w=>w.name);
+        if (!wines.length) throw new Error('no wines read');
+        setList(wines); setListPhoto(true); setShowPaste(false);
+      } else {
+        const names = (data?.dishes || []).map(d=>(d.name||'').trim()).filter(Boolean);
+        if (!names.length) throw new Error('no dishes read');
+        setDishes(names); setMenuPhoto(true);
+        if (!dish.trim()) setDish(names[0]);
+      }
+    } catch(err){
+      console.error('menu-vision failed', err);
+      setPhotoErr(kind);
+      isWine ? setListPhoto(false) : setMenuPhoto(false);
+    } finally {
+      isWine ? setListBusy(false) : setMenuBusy(false);
+    }
+  };
 
   const go = async ()=>{
     const wl = listText.trim()? parsedFromText() : list;
@@ -163,11 +230,17 @@ function DiningOut({ onClose, onSave }){
 
         {/* photos */}
         <DLbl>Snap it</DLbl>
+        <input ref={menuInputRef} type="file" accept="image/*" onChange={e=>onPhoto(e,'menu')} style={{ display:'none' }}/>
+        <input ref={listInputRef} type="file" accept="image/*" onChange={e=>onPhoto(e,'winelist')} style={{ display:'none' }}/>
         <div style={{ display:'flex', gap:10 }}>
-          <PhotoTile label="Menu photo" sub="To read the dish" filled={menuPhoto} onClick={()=>setMenuPhoto(v=>!v)}/>
-          <PhotoTile label="Wine list photo" sub="To read the options" filled={listPhoto} onClick={()=>{ setListPhoto(v=>!v); if(!listPhoto && !list.length) setShowPaste(true); }}/>
+          <PhotoTile label="Menu photo" sub="To read the dish" filled={menuPhoto} busy={menuBusy} onClick={()=>menuInputRef.current&&menuInputRef.current.click()}/>
+          <PhotoTile label="Wine list photo" sub="To read the options" filled={listPhoto} busy={listBusy} onClick={()=>listInputRef.current&&listInputRef.current.click()}/>
         </div>
-        <div style={{ fontSize:11.5, color:T.ink4, marginTop:8, lineHeight:1.4 }}>Auto-reading photos comes with the camera — for now, confirm the details below.</div>
+        {photoErr
+          ? <div style={{ fontSize:11.5, color:T.no, marginTop:8, lineHeight:1.4 }}>Couldn’t read that {photoErr==='winelist'?'wine list':'menu'} photo. Try a clearer, well-lit shot — or type the details below.</div>
+          : (menuPhoto || listPhoto)
+            ? <div style={{ fontSize:11.5, color:T.buy, marginTop:8, lineHeight:1.4 }}>{[menuPhoto?`${dishes.length} dish${dishes.length===1?'':'es'} read`:'', listPhoto?`${list.length} wine${list.length===1?'':'s'} read`:''].filter(Boolean).join(' · ')} — tweak anything below.</div>
+            : <div style={{ fontSize:11.5, color:T.ink4, marginTop:8, lineHeight:1.4 }}>Take a photo or pick from your library — we’ll read the dishes and wines for you.</div>}
 
         {/* dish */}
         <div style={{ height:22 }}/>
@@ -175,7 +248,7 @@ function DiningOut({ onClose, onSave }){
         <input value={dish} onChange={e=>setDish(e.target.value)} placeholder="e.g. Creamy shellfish pasta"
           style={{ width:'100%', boxSizing:'border-box', height:46, border:`1.5px solid ${dish?T.ink:T.line2}`, borderRadius:12, padding:'0 13px', fontFamily:'var(--sans)', fontSize:15.5, color:T.ink, outline:'none' }}/>
         <div style={{ display:'flex', flexWrap:'wrap', gap:7, marginTop:9 }}>
-          {EATING_EXAMPLES.slice(0,4).map(d=> <button key={d} onClick={()=>setDish(d)} style={{ padding:'6px 11px', borderRadius:99, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:12.5, fontWeight:540, cursor:'pointer' }}>{d}</button>)}
+          {(dishes.length ? dishes.slice(0,6) : EATING_EXAMPLES.slice(0,4)).map(d=> <button key={d} onClick={()=>setDish(d)} style={{ padding:'6px 11px', borderRadius:99, border:`1px solid ${dish===d?T.ink:T.line2}`, background:dish===d?T.ink:'#fff', color:dish===d?'#fff':T.ink2, fontFamily:'var(--sans)', fontSize:12.5, fontWeight:540, cursor:'pointer' }}>{d}</button>)}
         </div>
 
         {/* restaurant */}
