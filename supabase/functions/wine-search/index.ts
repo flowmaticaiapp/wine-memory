@@ -108,9 +108,16 @@ Deno.serve(async (req) => {
     });
 
     if (!res.ok) {
-      const detail = await res.text();
-      console.error("Anthropic error", res.status, detail);
-      return json({ error: "Search failed upstream." }, 502);
+      const raw = await res.text();
+      console.error("Anthropic error", res.status, raw);
+      // Surface a concise, non-secret reason (Anthropic error messages are safe
+      // to relay) so failures are diagnosable instead of an opaque 502.
+      let reason = raw;
+      try {
+        const parsedErr = JSON.parse(raw);
+        reason = parsedErr?.error?.message ?? raw;
+      } catch (_) { /* keep raw text */ }
+      return json({ error: "Search failed upstream.", upstreamStatus: res.status, detail: reason }, 502);
     }
 
     const data = await res.json();
