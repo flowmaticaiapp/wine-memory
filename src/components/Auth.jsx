@@ -1,10 +1,22 @@
-// Auth.jsx — magic-link sign-in screen + full-screen loader. Editorial parchment style.
+// Auth.jsx — sign-in: Google OAuth (primary) + magic-link email (secondary).
+// Editorial parchment style.
 import React, { useState } from 'react';
 import { T } from '../lib/data.js';
 import { supabase, supabaseConfigured } from '../lib/supabase.js';
 
 const wrap = { minHeight:'100vh', background:T.canvas, display:'flex', alignItems:'center', justifyContent:'center', padding:24, boxSizing:'border-box' };
 const card = { width:'100%', maxWidth:360, background:T.bg, borderRadius:20, padding:'40px 28px', boxShadow:'0 10px 40px rgba(22,20,15,0.10), 0 1px 2px rgba(22,20,15,0.05)' };
+
+function GoogleG({ size = 18 }){
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" aria-hidden="true">
+      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92A8.78 8.78 0 0 0 17.64 9.2z"/>
+      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/>
+      <path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z"/>
+      <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.89 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/>
+    </svg>
+  );
+}
 
 export function FullScreenLoader(){
   return <div style={wrap}><svg width={34} height={34} viewBox="0 0 24 24" style={{ animation:'wmSpin .8s linear infinite' }}>
@@ -16,6 +28,18 @@ export function AuthScreen(){
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState('idle'); // idle | sending | sent | error
   const [err, setErr] = useState('');
+  const [gErr, setGErr] = useState('');
+  const [gBusy, setGBusy] = useState(false);
+
+  const google = async () => {
+    setGErr(''); setGBusy(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) { setGErr(error.message); setGBusy(false); }
+    // on success the browser redirects to Google, so no further state needed
+  };
 
   const send = async (e) => {
     e.preventDefault();
@@ -40,22 +64,41 @@ export function AuthScreen(){
     <div style={wrap}><div style={card}>
       <div style={{ fontFamily:'var(--serif)', fontSize:30, color:T.ink, letterSpacing:0.2 }}>Wine Memory</div>
       <div style={{ fontSize:14.5, color:T.ink2, lineHeight:1.5, marginTop:8, marginBottom:26 }}>
-        Sign in to your cellar. We’ll email you a one-tap link — no password.
+        Sign in to your cellar.
       </div>
 
+      {/* Primary — Continue with Google */}
+      <button onClick={google} disabled={gBusy} style={{ width:'100%', height:52, borderRadius:12, border:'none', cursor:gBusy?'default':'pointer',
+        background:T.ink, color:'#fff', fontFamily:'var(--sans)', fontSize:15.5, fontWeight:680,
+        display:'flex', alignItems:'center', justifyContent:'center', gap:11 }}>
+        <span style={{ width:26, height:26, borderRadius:7, background:'#fff', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}><GoogleG/></span>
+        {gBusy ? 'Connecting…' : 'Continue with Google'}
+      </button>
+      {gErr && <div style={{ marginTop:9, fontSize:13, color:T.no, lineHeight:1.4 }}>{gErr}</div>}
+
+      {/* Divider */}
+      <div style={{ display:'flex', alignItems:'center', gap:12, margin:'22px 0 18px' }}>
+        <div style={{ flex:1, height:1, background:T.line2 }}/>
+        <span style={{ fontFamily:'var(--mono)', fontSize:10.5, letterSpacing:0.5, textTransform:'uppercase', color:T.ink3 }}>or</span>
+        <div style={{ flex:1, height:1, background:T.line2 }}/>
+      </div>
+
+      {/* Secondary — magic-link email */}
       {status === 'sent' ? (
         <div style={{ padding:'16px 14px', borderRadius:12, background:T.surface, border:`1px solid ${T.line}` }}>
           <div style={{ fontSize:15, fontWeight:680, color:T.ink }}>Check your email</div>
           <div style={{ fontSize:13.5, color:T.ink2, lineHeight:1.5, marginTop:5 }}>We sent a magic link to <b>{email}</b>. Open it on this device to sign in.</div>
-          <button onClick={()=>{ setStatus('idle'); }} style={{ marginTop:14, background:'none', border:'none', color:T.ink2, fontFamily:'var(--sans)', fontSize:13, fontWeight:600, cursor:'pointer', padding:0 }}>Use a different email</button>
+          <button onClick={()=>setStatus('idle')} style={{ marginTop:14, background:'none', border:'none', color:T.ink2, fontFamily:'var(--sans)', fontSize:13, fontWeight:600, cursor:'pointer', padding:0 }}>Use a different email</button>
         </div>
       ) : (
         <form onSubmit={send}>
-          <input type="email" autoFocus value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@email.com"
-            style={{ width:'100%', boxSizing:'border-box', height:50, border:`1.5px solid ${email?T.ink:T.line2}`, borderRadius:12, padding:'0 14px', fontFamily:'var(--sans)', fontSize:16, color:T.ink, outline:'none', background:'#fff' }}/>
+          <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@email.com"
+            style={{ width:'100%', boxSizing:'border-box', height:48, border:`1.5px solid ${email?T.ink:T.line2}`, borderRadius:12, padding:'0 14px', fontFamily:'var(--sans)', fontSize:15.5, color:T.ink, outline:'none', background:'#fff' }}/>
           {status === 'error' && <div style={{ marginTop:9, fontSize:13, color:T.no, lineHeight:1.4 }}>{err}</div>}
-          <button type="submit" disabled={!email.trim() || status==='sending'} style={{ width:'100%', marginTop:14, height:50, borderRadius:12, border:'none', cursor:email.trim()?'pointer':'default', background:email.trim()?T.ink:T.raised, color:email.trim()?'#fff':T.ink4, fontFamily:'var(--sans)', fontSize:15.5, fontWeight:700 }}>
-            {status==='sending' ? 'Sending…' : 'Send magic link'}
+          <button type="submit" disabled={!email.trim() || status==='sending'} style={{ width:'100%', marginTop:12, height:48, borderRadius:12, cursor:email.trim()?'pointer':'default',
+            background:'#fff', border:`1.5px solid ${email.trim()?T.ink:T.line2}`, color:email.trim()?T.ink:T.ink4,
+            fontFamily:'var(--sans)', fontSize:14.5, fontWeight:640 }}>
+            {status==='sending' ? 'Sending…' : 'Email me a magic link'}
           </button>
         </form>
       )}
