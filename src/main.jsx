@@ -101,6 +101,10 @@ function VApp({ session }){
   const [seed,setSeed]=useState('');
   const [toast,setToast]=useState(null);
   useDeviceFit();
+  // On a real phone the app should be full-screen; the simulated iPhone frame is
+  // only a desktop showcase. Render full-bleed on narrow viewports.
+  const [isMobile, setIsMobile] = useState(typeof window!=='undefined' && window.innerWidth < 600);
+  useEffect(()=>{ const f=()=> setIsMobile(window.innerWidth < 600); window.addEventListener('resize', f); return ()=> window.removeEventListener('resize', f); },[]);
   const flash=(m)=>{ setToast(m); setTimeout(()=>setToast(null),2200); };
 
   // load this user's cellar + pairings
@@ -129,46 +133,62 @@ function VApp({ session }){
   const fullPanel = ['searchadd','import','search','diningout','snap','scan'].includes(overlay);
   const hasSamples = wines? wines.some(w=>w.sample) : false;
 
+  const screen = (
+    <div style={{ position:'relative', height:'100%', width:'100%', background:'#fff', overflow:'hidden' }}>
+      {loading && <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}><svg width={30} height={30} viewBox="0 0 24 24" style={{ animation:'wmSpin .8s linear infinite' }}><circle cx="12" cy="12" r="9" fill="none" stroke={T.line2} strokeWidth="2.6"/><path d="M21 12a9 9 0 00-9-9" fill="none" stroke={T.ink} strokeWidth="2.6" strokeLinecap="round"/></svg></div>}
+      {!loading && <>
+      {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onShopping={()=>setOverlay('addhub')} onHome={()=>ask('')} onDiningOut={()=>setOverlay('diningout')} onExplore={()=>setTab('learn')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')} onAccount={()=>setOverlay('account')}/>}
+      {tab==='collection' && <Collection wines={wines} cols={cols} filter={filter} setFilter={setFilter} hasSamples={hasSamples} onClearSamples={clearSamples} onOpen={(id)=>setOverlay({detail:id})} onSearch={()=>ask('')}/>}
+      {tab==='palate' && <PalateScreen wines={wines} pairings={pairings} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask} email={session.user.email} onSignOut={signOut}/>}
+      {tab==='learn' && <ExploreScreen region={exploreRegion} wines={wines} onPick={setExploreRegion} onOpenWine={(id)=>setOverlay({detail:id})}/>}
+
+      {!detail && !fullPanel && (<><VNav tab={tab} setTab={setTab}/><VFAB onClick={()=>setOverlay('addhub')}/></>)}
+
+      {overlay==='addhub' && <AddHub onClose={()=>setOverlay(null)} onSearch={()=>setOverlay('searchadd')} onImport={()=>setOverlay('import')} onSnap={()=>setOverlay('snap')} onScan={()=>setOverlay('scan')}/>}
+      {overlay==='snap' && <SnapLabel onClose={()=>setOverlay(null)} onSave={addWine} verdictVariant={t.verdictStyle}/>}
+      {overlay==='scan' && <ScanBottles onClose={()=>setOverlay(null)} onAddMany={scanAdd} sampleSrc="app/scan-demo.jpg"/>}
+      {overlay==='searchadd' && <SearchAdd onClose={()=>setOverlay(null)} onSave={addWine} verdictVariant={t.verdictStyle}/>}
+      {overlay==='import' && <OrderImport onClose={()=>setOverlay(null)} onAddMany={addMany} onViewToTry={viewToTry}/>}
+      {overlay==='search' && <PairingSearch wines={wines} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
+      {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining}/>}
+      {overlay==='account' && <AccountSheet email={session.user.email} provider={session.user.app_metadata?.provider} onClose={()=>setOverlay(null)} onSignOut={signOut}/>}
+      {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} verdictVariant={t.verdictStyle}/>}
+      </>}
+
+      <VToast toast={toast}/>
+    </div>
+  );
+
+  const tweaks = (
+    <TweaksPanel>
+      <TweakSection label="Grid density" />
+      <TweakRadio label="Columns" value={t.columns} options={['2','3']} onChange={(v)=>setTweak('columns',v)} />
+      <TweakSection label="Verdict style" />
+      <TweakRadio label="Buy / Maybe / No UI" value={t.verdictStyle} options={['expressive','subtle','glyph']} onChange={(v)=>setTweak('verdictStyle',v)} />
+      <TweakSection label="Account" />
+      <div style={{ fontSize:11, color:'rgba(41,38,27,.6)', wordBreak:'break-all' }}>{session.user.email}</div>
+      <TweakButton label="Sign out" secondary onClick={signOut} />
+    </TweaksPanel>
+  );
+
+  // Mobile: the app IS the screen, full-bleed (no simulated device frame).
+  if (isMobile) return (
+    <div style={{ position:'relative', width:'100%', height:'100dvh', background:'#fff', overflow:'hidden' }}>
+      {screen}
+      {tweaks}
+    </div>
+  );
+
+  // Desktop: present the app inside the iPhone mockup, centered.
   return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:14, boxSizing:'border-box', background:T.canvas }}>
       <div id="wm-device">
       <IOSDevice width={393} height={852} dark={false}>
-        <div style={{ position:'relative', height:'100%', width:'100%', background:'#fff', overflow:'hidden' }}>
-          {loading && <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}><svg width={30} height={30} viewBox="0 0 24 24" style={{ animation:'wmSpin .8s linear infinite' }}><circle cx="12" cy="12" r="9" fill="none" stroke={T.line2} strokeWidth="2.6"/><path d="M21 12a9 9 0 00-9-9" fill="none" stroke={T.ink} strokeWidth="2.6" strokeLinecap="round"/></svg></div>}
-          {!loading && <>
-          {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onShopping={()=>setOverlay('addhub')} onHome={()=>ask('')} onDiningOut={()=>setOverlay('diningout')} onExplore={()=>setTab('learn')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')} onAccount={()=>setOverlay('account')}/>}
-          {tab==='collection' && <Collection wines={wines} cols={cols} filter={filter} setFilter={setFilter} hasSamples={hasSamples} onClearSamples={clearSamples} onOpen={(id)=>setOverlay({detail:id})} onSearch={()=>ask('')}/>}
-          {tab==='palate' && <PalateScreen wines={wines} pairings={pairings} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask} email={session.user.email} onSignOut={signOut}/>}
-          {tab==='learn' && <ExploreScreen region={exploreRegion} wines={wines} onPick={setExploreRegion} onOpenWine={(id)=>setOverlay({detail:id})}/>}
-
-          {!detail && !fullPanel && (<><VNav tab={tab} setTab={setTab}/><VFAB onClick={()=>setOverlay('addhub')}/></>)}
-
-          {overlay==='addhub' && <AddHub onClose={()=>setOverlay(null)} onSearch={()=>setOverlay('searchadd')} onImport={()=>setOverlay('import')} onSnap={()=>setOverlay('snap')} onScan={()=>setOverlay('scan')}/>}
-          {overlay==='snap' && <SnapLabel onClose={()=>setOverlay(null)} onSave={addWine} verdictVariant={t.verdictStyle}/>}
-          {overlay==='scan' && <ScanBottles onClose={()=>setOverlay(null)} onAddMany={scanAdd} sampleSrc="app/scan-demo.jpg"/>}
-          {overlay==='searchadd' && <SearchAdd onClose={()=>setOverlay(null)} onSave={addWine} verdictVariant={t.verdictStyle}/>}
-          {overlay==='import' && <OrderImport onClose={()=>setOverlay(null)} onAddMany={addMany} onViewToTry={viewToTry}/>}
-          {overlay==='search' && <PairingSearch wines={wines} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
-          {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining}/>}
-          {overlay==='account' && <AccountSheet email={session.user.email} provider={session.user.app_metadata?.provider} onClose={()=>setOverlay(null)} onSignOut={signOut}/>}
-          {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} verdictVariant={t.verdictStyle}/>}
-          </>}
-
-          <VToast toast={toast}/>
-        </div>
+        {screen}
       </IOSDevice>
       </div>
-
       <TweaksToggle/>
-      <TweaksPanel>
-        <TweakSection label="Grid density" />
-        <TweakRadio label="Columns" value={t.columns} options={['2','3']} onChange={(v)=>setTweak('columns',v)} />
-        <TweakSection label="Verdict style" />
-        <TweakRadio label="Buy / Maybe / No UI" value={t.verdictStyle} options={['expressive','subtle','glyph']} onChange={(v)=>setTweak('verdictStyle',v)} />
-        <TweakSection label="Account" />
-        <div style={{ fontSize:11, color:'rgba(41,38,27,.6)', wordBreak:'break-all' }}>{session.user.email}</div>
-        <TweakButton label="Sign out" secondary onClick={signOut} />
-      </TweaksPanel>
+      {tweaks}
     </div>
   );
 }
