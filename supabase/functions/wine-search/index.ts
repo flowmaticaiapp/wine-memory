@@ -5,9 +5,13 @@
 // Anthropic key is never exposed and only authenticated callers can use it.
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-// Default to the most capable model. Override with the WINE_MODEL secret to
-// trade accuracy for cost/latency (e.g. claude-haiku-4-5, claude-sonnet-4-6).
-const MODEL = Deno.env.get("WINE_MODEL") ?? "claude-opus-4-8";
+// Default to Sonnet 4.6: cheaper and faster than Opus, and plenty accurate for
+// wine identification (a recall task), while still supporting the `effort` param
+// and structured outputs this function relies on. Override with the WINE_MODEL
+// secret to trade accuracy for cost — e.g. claude-opus-4-8 for tougher lookups.
+// (Note: claude-haiku-4-5 is cheaper still but does NOT support `effort`, so it
+// can't be dropped in here without also removing that param below.)
+const MODEL = Deno.env.get("WINE_MODEL") ?? "claude-sonnet-4-6";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",

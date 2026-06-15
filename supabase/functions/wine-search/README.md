@@ -25,7 +25,10 @@ Anthropic key is never exposed to the client.
    ```
 
 ## Notes
-- Model defaults to `claude-opus-4-8`; override with the `WINE_MODEL` secret.
+- Model defaults to `claude-sonnet-4-6` (cheaper/faster than Opus, supports
+  `effort` + structured outputs). Override with the `WINE_MODEL` secret — e.g.
+  `claude-opus-4-8` for tougher lookups. Note: `claude-haiku-4-5` does NOT support
+  the `effort` param, so it can't be used without also editing `index.ts`.
 - `effort: "low"` keeps it snappy; bump to `medium`/`high` in `index.ts` for more
   thoroughness.
 - The client calls it via `supabase.functions.invoke('wine-search', { body:{ query } })`
