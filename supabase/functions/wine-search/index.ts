@@ -90,22 +90,35 @@ Deno.serve(async (req) => {
       `Ground every field in real-world wine knowledge — do not invent a producer or bottling that doesn't exist. If you can't identify any real wine, return an empty matches array.\n` +
       `Set confidence honestly (high = you're sure of the exact bottling; low = a guess). Flavor axes are integers 0-5. Provide approximate region lat/lng when you know them.`;
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 1024,
-        // Low effort keeps this snappy; wine identification is recall, not deep
-        // reasoning. Bump to "medium"/"high" if you want more thoroughness.
-        output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } },
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+    // Low effort keeps this snappy (wine ID is recall, not deep reasoning), but
+    // some models (e.g. claude-haiku-4-5) reject the `effort` param outright. So
+    // we try with it, then transparently retry without it on that exact 400 —
+    // the function stays correct no matter which model WINE_MODEL points at.
+    const callClaude = (withEffort: boolean): Promise<Response> => {
+      const output_config: Record<string, unknown> = {
+        format: { type: "json_schema", schema: SCHEMA },
+      };
+      if (withEffort) output_config.effort = "low";
+      return fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 1024,
+          output_config,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+    };
+
+    let res = await callClaude(true);
+    if (res.status === 400 && /effort parameter/i.test(await res.clone().text())) {
+      res = await callClaude(false);
+    }
 
     if (!res.ok) {
       const raw = await res.text();
