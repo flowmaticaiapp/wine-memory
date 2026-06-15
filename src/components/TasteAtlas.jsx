@@ -11,10 +11,25 @@ import { groupByRegion, affinityLevel } from '../lib/palate.js';
 
 const INK = '#17150f';
 
+let _cssInjected = false;
+function injectAtlasCss(){
+  if (_cssInjected) return; _cssInjected = true;
+  const s = document.createElement('style');
+  s.textContent = `
+    .leaflet-control-zoom{ border:none !important; box-shadow:0 1px 5px rgba(22,20,15,0.18) !important; margin:10px !important; }
+    .leaflet-control-zoom a{ width:28px !important; height:28px !important; line-height:28px !important; font-size:16px !important;
+      color:#5d584c !important; background:rgba(250,249,246,0.94) !important; border-color:rgba(22,20,15,0.10) !important; }
+    .leaflet-control-zoom a:hover{ background:#fff !important; color:#17150f !important; }
+    .leaflet-control-attribution{ font-size:9.5px !important; background:rgba(246,245,242,0.8) !important; }
+  `;
+  document.head.appendChild(s);
+}
+
 export function TasteAtlas({ wines, onOpenWine, selKey, onSelect }){
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef({});
+  const everSelected = useRef(false);
   const regions = useMemo(()=> groupByRegion(wines), [wines]);
 
   // init map once
@@ -26,6 +41,8 @@ export function TasteAtlas({ wines, onOpenWine, selKey, onSelect }){
       subdomains:'abcd', maxZoom:11, attribution:'© OpenStreetMap, © CARTO',
     }).addTo(map);
     map.attributionControl.setPrefix('');
+    L.control.zoom({ position:'topright' }).addTo(map);
+    injectAtlasCss();
     map.setView([25, 0], 1);
     return ()=>{ map.remove(); mapRef.current = null; markersRef.current = {}; };
   }, []);
@@ -58,14 +75,25 @@ export function TasteAtlas({ wines, onOpenWine, selKey, onSelect }){
     return ()=> cancelAnimationFrame(raf);
   }, [regions]);
 
-  // emphasize the selected marker
+  // emphasize the selected marker + fly the map to it (zoom back out on deselect)
   useEffect(()=>{
+    const map = mapRef.current;
     Object.entries(markersRef.current).forEach(([key, o])=>{
       const on = key === selKey;
       o.core.setStyle({ radius: (4 + (o.lvl-1)) + (on?3:0), color: on ? INK : '#fff', weight: on ? 2.5 : 1.5 });
       if (on) o.core.bringToFront();
     });
-  }, [selKey]);
+    if (!map) return;
+    if (selKey){
+      everSelected.current = true;
+      const r = regions.find(x=>x.key===selKey);
+      if (r && r.center) map.flyTo(r.center, Math.max(map.getZoom(), 6), { duration:0.7 });
+    } else if (everSelected.current){
+      const pts = regions.filter(r=>r.center).map(r=>r.center);
+      if (pts.length>1) map.flyToBounds(L.latLngBounds(pts), { padding:[26,26], maxZoom:6, duration:0.6 });
+      else if (pts.length===1) map.flyTo(pts[0], 5, { duration:0.6 });
+    }
+  }, [selKey, regions]);
 
   const sel = regions.find(r=> r.key === selKey);
 
@@ -73,7 +101,7 @@ export function TasteAtlas({ wines, onOpenWine, selKey, onSelect }){
     <div>
       <div style={{ position:'relative', borderRadius:14, overflow:'hidden', border:`1px solid ${T.line}` }}>
         <div ref={elRef} style={{ height:240, width:'100%', background:T.raised }}/>
-        {!selKey && <div style={{ position:'absolute', left:0, right:0, bottom:0, padding:'7px 10px', textAlign:'center', fontFamily:'var(--mono)', fontSize:10.5, color:T.ink3, background:'rgba(246,245,242,0.82)', backdropFilter:'blur(4px)', pointerEvents:'none' }}>Tap a region · larger, darker = more loved</div>}
+        {!selKey && <div style={{ position:'absolute', left:0, right:0, bottom:0, padding:'7px 10px', textAlign:'center', fontFamily:'var(--mono)', fontSize:10.5, color:T.ink3, background:'rgba(246,245,242,0.82)', backdropFilter:'blur(4px)', pointerEvents:'none' }}>Tap a region to zoom in · pinch or +/− to explore</div>}
       </div>
       {sel && <RegionCard region={sel} onOpenWine={onOpenWine} onClose={()=>onSelect(null)}/>}
     </div>
