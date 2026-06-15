@@ -38,7 +38,7 @@ function VNav({ tab, setTab }){
       {item('collection','collection','Cellar')}
       <div style={{ width:62, flexShrink:0 }}/>
       {item('palate','heart','Palate')}
-      {item('learn','globe','Explore')}
+      {item('account','user','Account')}
     </div>
   );
 }
@@ -52,23 +52,24 @@ function VToast({ toast }){
     <span style={{ fontFamily:'var(--sans)', fontSize:14, fontWeight:600 }}>{toast}</span></div>;
 }
 
-function AccountSheet({ email, provider, onClose, onSignOut }){
+function AccountScreen({ email, provider }){
   const method = provider==='google' ? 'Google' : 'email magic link';
   return (
-    <div onClick={onClose} style={{ position:'absolute', inset:0, zIndex:90, background:'rgba(17,17,19,0.34)', display:'flex', alignItems:'flex-end' }}>
-      <div onClick={e=>e.stopPropagation()} style={{ width:'100%', background:'#fff', borderRadius:'24px 24px 0 0', padding:'10px 18px calc(26px + env(safe-area-inset-bottom))', boxShadow:'0 -10px 44px rgba(0,0,0,0.2)' }}>
-        <div style={{ width:38, height:5, borderRadius:99, background:T.line2, margin:'0 auto 18px' }}/>
-        <div style={{ fontSize:20, fontWeight:740, letterSpacing:-0.4, marginBottom:16 }}>Account</div>
-        <div style={{ display:'flex', alignItems:'center', gap:13, padding:'14px', borderRadius:14, background:T.canvas, border:`1px solid ${T.line}`, marginBottom:14 }}>
-          <span style={{ width:44, height:44, borderRadius:99, background:'#fff', border:`1px solid ${T.line2}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}><Icon name="user" size={22} color={T.ink2}/></span>
+    <div style={{ height:'100%', overflow:'auto', background:'#fff' }}>
+      <div style={{ paddingTop:50 }}/>
+      <div style={{ padding:'8px 18px', paddingBottom:160 }}>
+        <h1 style={{ margin:0, fontSize:27, fontWeight:780, letterSpacing:-0.9 }}>Account</h1>
+        <div style={{ marginTop:20, display:'flex', alignItems:'center', gap:14, padding:'16px', borderRadius:16, background:T.surface, border:`1px solid ${T.line}` }}>
+          <span style={{ width:48, height:48, borderRadius:99, background:'#fff', border:`1px solid ${T.line2}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}><Icon name="user" size={24} color={T.ink2}/></span>
           <div style={{ minWidth:0 }}>
-            <div style={{ fontSize:15, fontWeight:680, color:T.ink, wordBreak:'break-all' }}>{email}</div>
-            <div style={{ fontSize:12.5, color:T.ink3, marginTop:2 }}>Signed in with {method}</div>
+            <div style={{ fontSize:15.5, fontWeight:680, color:T.ink, wordBreak:'break-all' }}>{email}</div>
+            <div style={{ fontSize:13, color:T.ink3, marginTop:2 }}>Signed in with {method}</div>
           </div>
         </div>
-        <button onClick={onSignOut} style={{ width:'100%', padding:'15px', borderRadius:13, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:15, fontWeight:680, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+        <button onClick={signOut} style={{ width:'100%', marginTop:14, padding:'15px', borderRadius:13, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:15, fontWeight:680, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
           <Icon name="lock" size={17} color={T.ink}/> Sign out
         </button>
+        <div style={{ marginTop:20, fontFamily:'var(--mono)', fontSize:10.5, color:T.ink4, letterSpacing:0.3 }}>Wine Memory</div>
       </div>
     </div>
   );
@@ -137,10 +138,11 @@ function VApp({ session }){
     <div style={{ position:'relative', height:'100%', width:'100%', background:'#fff', overflow:'hidden' }}>
       {loading && <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}><svg width={30} height={30} viewBox="0 0 24 24" style={{ animation:'wmSpin .8s linear infinite' }}><circle cx="12" cy="12" r="9" fill="none" stroke={T.line2} strokeWidth="2.6"/><path d="M21 12a9 9 0 00-9-9" fill="none" stroke={T.ink} strokeWidth="2.6" strokeLinecap="round"/></svg></div>}
       {!loading && <>
-      {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onShopping={()=>setOverlay('addhub')} onHome={()=>ask('')} onDiningOut={()=>setOverlay('diningout')} onExplore={()=>setTab('learn')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')} onAccount={()=>setOverlay('account')}/>}
+      {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onShopping={()=>setOverlay('addhub')} onHome={()=>ask('')} onDiningOut={()=>setOverlay('diningout')} onExplore={()=>setTab('learn')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')}/>}
       {tab==='collection' && <Collection wines={wines} cols={cols} filter={filter} setFilter={setFilter} hasSamples={hasSamples} onClearSamples={clearSamples} onOpen={(id)=>setOverlay({detail:id})} onSearch={()=>ask('')}/>}
-      {tab==='palate' && <PalateScreen wines={wines} pairings={pairings} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask} email={session.user.email} onSignOut={signOut}/>}
+      {tab==='palate' && <PalateScreen wines={wines} pairings={pairings} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask}/>}
       {tab==='learn' && <ExploreScreen region={exploreRegion} wines={wines} onPick={setExploreRegion} onOpenWine={(id)=>setOverlay({detail:id})}/>}
+      {tab==='account' && <AccountScreen email={session.user.email} provider={session.user.app_metadata?.provider}/>}
 
       {!detail && !fullPanel && (<><VNav tab={tab} setTab={setTab}/><VFAB onClick={()=>setOverlay('addhub')}/></>)}
 
@@ -151,7 +153,6 @@ function VApp({ session }){
       {overlay==='import' && <OrderImport onClose={()=>setOverlay(null)} onAddMany={addMany} onViewToTry={viewToTry}/>}
       {overlay==='search' && <PairingSearch wines={wines} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
       {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining}/>}
-      {overlay==='account' && <AccountSheet email={session.user.email} provider={session.user.app_metadata?.provider} onClose={()=>setOverlay(null)} onSignOut={signOut}/>}
       {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} verdictVariant={t.verdictStyle}/>}
       </>}
 

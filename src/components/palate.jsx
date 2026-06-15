@@ -29,7 +29,7 @@ function Dots({ level }){
 
 function SectionLbl({ children }){ return <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.4, textTransform:'uppercase', margin:'24px 0 11px' }}>{children}</div>; }
 
-function PalateScreen({ wines, pairings, onOpenWine, onAsk, email, onSignOut }){
+function PalateScreen({ wines, pairings, onOpenWine, onAsk }){
   const sig = tasteSignature(wines);
   const loved = regionsYouLove(wines);
   const next = exploreNext(wines, sig);
@@ -43,14 +43,8 @@ function PalateScreen({ wines, pairings, onOpenWine, onAsk, email, onSignOut }){
       <div style={{ padding:'8px 18px', paddingBottom:V_NAV+96 }}>
 
         {/* header */}
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12 }}>
-          <div>
-            <h1 style={{ margin:0, fontSize:27, fontWeight:780, letterSpacing:-0.9 }}>My Palate</h1>
-            <p style={{ margin:'6px 0 0', fontSize:14, color:T.ink3, lineHeight:1.5 }}>A portrait of your taste, learned from your bottles.</p>
-          </div>
-          {onSignOut && <button onClick={onSignOut} style={{ flexShrink:0, marginTop:4, display:'inline-flex', alignItems:'center', gap:6, background:'#fff', border:`1px solid ${T.line2}`, borderRadius:99, padding:'7px 13px', cursor:'pointer', fontFamily:'var(--sans)', fontSize:12.5, fontWeight:600, color:T.ink2 }}><Icon name="lock" size={14} color={T.ink2}/> Sign out</button>}
-        </div>
-        {email && <div style={{ marginTop:6, fontFamily:'var(--mono)', fontSize:11, color:T.ink4 }}>Signed in as {email}</div>}
+        <h1 style={{ margin:0, fontSize:27, fontWeight:780, letterSpacing:-0.9 }}>My Palate</h1>
+        <p style={{ margin:'6px 0 0', fontSize:14, color:T.ink3, lineHeight:1.5 }}>A portrait of your taste, learned from your bottles.</p>
 
         {/* 1 · taste signature */}
         {sig ? (
