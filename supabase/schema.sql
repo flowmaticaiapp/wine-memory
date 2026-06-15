@@ -56,6 +56,14 @@ drop policy if exists "own rows" on public.pairings;
 create policy "own rows" on public.pairings for all
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+-- ── Role grants — let signed-in users touch the tables at all ───────
+-- RLS (above) restricts WHICH rows each user sees; these grants let the
+-- `authenticated` role reach the tables. `anon` is intentionally NOT granted —
+-- the app requires sign-in, so unauthenticated requests get nothing.
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on public.wines    to authenticated;
+grant select, insert, update, delete on public.pairings to authenticated;
+
 -- ── Storage: bottle photos ──────────────────────────────────────────
 -- Public-read bucket (label photos aren't sensitive); writes scoped to the
 -- user's own folder:  bottle-photos/{user_id}/{file}.jpg
