@@ -13,7 +13,7 @@ const DEST = [
   ['Explore','Regions, grapes & pairings.','learn'],
 ];
 
-function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, onOpenWine, onCollection }){
+function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, onOpenWine, onCollection, onAccount }){
   const recent = wines.slice().sort((a,b)=> new Date(b.added)-new Date(a.added)).slice(0,6);
   const route = { shopping:onShopping, home:onHome, dining:onDiningOut, learn:onExplore };
   return (
@@ -23,7 +23,9 @@ function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, 
         {/* wordmark */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div style={{ fontFamily:'var(--serif)', fontSize:23, fontWeight:500, color:T.ink, letterSpacing:0.2 }}>Wine Memory</div>
-          <div style={{ fontFamily:'var(--sans)', fontSize:9.5, fontWeight:600, letterSpacing:'.28em', textTransform:'uppercase', color:T.ink3 }}>Sommelier</div>
+          <button onClick={onAccount} aria-label="Account" style={{ width:36, height:36, borderRadius:99, background:'#fff', border:`1px solid ${T.line2}`, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <Icon name="user" size={19} color={T.ink2}/>
+          </button>
         </div>
 
         {/* hero */}
