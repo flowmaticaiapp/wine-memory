@@ -171,8 +171,8 @@ function SearchError({ onRetry }){
   return (
     <div style={{ textAlign:'center', padding:'56px 40px' }}>
       <div style={{ width:50, height:50, borderRadius:99, background:T.noBg, display:'inline-flex', alignItems:'center', justifyContent:'center', marginBottom:14 }}><Icon name="x" size={22} color={T.no}/></div>
-      <div style={{ fontSize:16, fontWeight:680 }}>Couldn’t reach the wine database</div>
-      <div style={{ fontSize:13.5, color:T.ink3, marginTop:6, lineHeight:1.5 }}>Check your connection and try again.</div>
+      <div style={{ fontSize:16, fontWeight:680 }}>Search is temporarily unavailable</div>
+      <div style={{ fontSize:13.5, color:T.ink3, marginTop:6, lineHeight:1.5 }}>Try again.</div>
       <button onClick={onRetry} style={{ marginTop:18, padding:'12px 20px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:14, fontWeight:650, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:7 }}><Icon name="reset" size={16} color={T.ink}/> Retry</button>
     </div>
   );
