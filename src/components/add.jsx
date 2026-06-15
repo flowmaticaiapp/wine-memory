@@ -2,10 +2,20 @@
 // Also home to the shared Panel / Spinner / Shimmer / Stepper used by the other overlays.
 // Ported from app/add.jsx.
 import React from 'react';
-import { T, QUICK_TAGS, SEARCH_INDEX, SAMPLE_ORDER, parseOrder } from '../lib/data.js';
+import { T, QUICK_TAGS, SAMPLE_ORDER, parseOrder } from '../lib/data.js';
 import { Icon, LabelTile, VerdictPicker, Chip, typeColor } from './ui.jsx';
 import { BottlePhoto } from './bottle.jsx';
 import { IOSKeyboard } from './IOSFrame.jsx';
+import { supabase } from '../lib/supabase.js';
+
+// Map an AI search candidate to the app's wine-draft shape.
+function normalizeMatch(m){
+  return {
+    producer:m.producer, name:m.name, vintage:m.vintage, type:m.type, grape:m.grape||'',
+    region:m.region||'', country:m.country||'', family:m.family, flavor:m.flavor,
+    pairings:m.pairings||[], loc:(m.lng!=null&&m.lat!=null)?[m.lng,m.lat]:undefined,
+  };
+}
 
 const { useState: aUS, useEffect: aUE, useRef: aUR } = React;
 const A_STATUS_H = 50;
@@ -61,14 +71,18 @@ function SearchAdd({ onClose, onSave, verdictVariant }) {
 
   aUE(()=>{
     clearTimeout(timer.current);
-    const s = q.trim().toLowerCase();
+    const s = q.trim();
     if (s.length < 2){ setPhase('idle'); return; }
     setPhase('loading');
-    timer.current = setTimeout(()=>{
-      if (s === 'error'){ setPhase('error'); return; }
-      const r = SEARCH_INDEX.filter(w=> [w.producer,w.name,w.region,w.grape].join(' ').toLowerCase().includes(s));
-      setResults(r); setPhase(r.length?'results':'empty');
-    }, 650);
+    timer.current = setTimeout(async ()=>{
+      try {
+        if (!supabase) throw new Error('not configured');
+        const { data, error } = await supabase.functions.invoke('wine-search', { body:{ query:s } });
+        if (error) throw error;
+        const r = (data?.matches || []).map(normalizeMatch);
+        setResults(r); setPhase(r.length?'results':'empty');
+      } catch(e){ console.error('wine-search failed', e); setPhase('error'); }
+    }, 550);
     return ()=>clearTimeout(timer.current);
   },[q]);
 
