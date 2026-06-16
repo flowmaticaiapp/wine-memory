@@ -3,6 +3,8 @@
 // structured text (dish names / parsed wines). Mirrors wine-search: raw fetch to
 // the Anthropic Messages API, structured outputs, JWT-protected, key server-side.
 
+import { gate } from "../_shared/auth.ts";
+
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 // Vision-capable, cheaper/faster than Opus, supports effort + structured outputs.
 const MODEL = Deno.env.get("MENU_MODEL") ?? "claude-sonnet-4-6";
@@ -64,6 +66,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   if (!ANTHROPIC_API_KEY) return json({ error: "Photo reading is not configured." }, 503);
+
+  const g = await gate(req, "menu-vision");
+  if (!g.ok) return json({ error: g.error, blocked: true }, g.status);
 
   try {
     const { image, kind } = await req.json().catch(() => ({}));

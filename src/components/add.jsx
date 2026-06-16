@@ -7,6 +7,7 @@ import { Icon, LabelTile, VerdictPicker, Chip, typeColor } from './ui.jsx';
 import { BottlePhoto } from './bottle.jsx';
 import { IOSKeyboard } from './IOSFrame.jsx';
 import { supabase } from '../lib/supabase.js';
+import { invokeAI } from '../lib/ai.js';
 
 // Map an AI search candidate to the app's wine-draft shape.
 function normalizeMatch(m){
@@ -75,9 +76,7 @@ function SearchAdd({ onClose, onSave, verdictVariant }) {
     setPhase('loading');
     timer.current = setTimeout(async ()=>{
       try {
-        if (!supabase) throw new Error('not configured');
-        const { data, error } = await supabase.functions.invoke('wine-search', { body:{ query:s } });
-        if (error) throw error;
+        const data = await invokeAI('wine-search', { query:s });
         const r = (data?.matches || []).map(normalizeMatch);
         setResults(r); setPhase(r.length?'results':'empty');
       } catch(e){ console.error('wine-search failed', e); setPhase('error'); }

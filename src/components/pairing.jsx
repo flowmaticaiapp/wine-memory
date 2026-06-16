@@ -11,6 +11,8 @@ import { BottlePhoto, typeHue } from './bottle.jsx';
 import { Spinner } from './add.jsx';
 import { V_STATUS } from '../lib/constants.js';
 import { supabase } from '../lib/supabase.js';
+import { invokeAI } from '../lib/ai.js';
+import { track } from '../lib/analytics.js';
 
 const { useState: pUS, useEffect: pUE, useRef: pUR } = React;
 
@@ -89,9 +91,7 @@ function collectionSummary(wines){
 // the question; returns { kind:'pairing', dish, primary, others } or { kind:'answer', text }.
 async function askSommelier(query, wines){
   const { owned, ownedGrapes } = collectionSummary(wines);
-  const { data, error } = await supabase.functions.invoke('sommelier', { body:{ query, owned, ownedGrapes } });
-  if (error) throw error;
-  return data;
+  return await invokeAI('sommelier', { query, owned, ownedGrapes });
 }
 
 function ownedMatches(result, wines){
@@ -154,7 +154,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
 
   const run = async (query)=>{
     const Q = (query!=null?query:q).trim(); if(!Q) return;
-    setAsked(Q); setQ(Q); setPhase('thinking');
+    setAsked(Q); setQ(Q); setPhase('thinking'); track('sommelier_question');
     try {
       if (!supabase) throw new Error('not configured');
       const r = await askSommelier(Q, wines);   // model classifies pairing vs. answer

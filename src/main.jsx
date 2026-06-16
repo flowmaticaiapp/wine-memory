@@ -18,6 +18,7 @@ import { PairingSearch } from './components/pairing.jsx';
 import { DiningOut } from './components/diningout.jsx';
 import { supabase, supabaseConfigured } from './lib/supabase.js';
 import * as db from './lib/db.js';
+import { track } from './lib/analytics.js';
 import { AuthScreen, FullScreenLoader, signOut } from './components/Auth.jsx';
 
 const VTWEAKS = {
@@ -106,6 +107,8 @@ function VApp({ session }){
   const [isMobile, setIsMobile] = useState(typeof window!=='undefined' && window.innerWidth < 600);
   useEffect(()=>{ const f=()=> setIsMobile(window.innerWidth < 600); window.addEventListener('resize', f); return ()=> window.removeEventListener('resize', f); },[]);
   const flash=(m)=>{ setToast(m); setTimeout(()=>setToast(null),2200); };
+  useEffect(()=>{ const h=(e)=>flash(e.detail||'Daily limit reached.'); window.addEventListener('wm-ai-blocked', h); return ()=>window.removeEventListener('wm-ai-blocked', h); }, []);
+  useEffect(()=>{ try{ const u=session.user; if(u && u.created_at && (Date.now()-new Date(u.created_at).getTime())<300000 && !localStorage.getItem('wm_signup_'+u.id)){ track('signup', { provider:u.app_metadata?.provider }); localStorage.setItem('wm_signup_'+u.id,'1'); } }catch(_){} }, []);
 
   // load this user's cellar + pairings
   useEffect(()=>{ let on=true;
@@ -119,8 +122,8 @@ function VApp({ session }){
 
   const cols = t.columns==='3'?3:2;
   const loading = wines===null;
-  const updateWine=(id,patch)=>{ setWines(ws=>ws.map(w=>w.id===id?{...w,...patch}:w)); db.updateWine(id,patch).catch(e=>console.error('Update failed', e)); };
-  const addWine=async(w)=>{ try{ const saved=await db.insertWine(userId, autoEnrich(w)); setWines(ws=>[saved,...ws]); setOverlay(null); flash('Added to your collection'); }catch(e){ console.error(e); flash('Could not save'); } };
+  const updateWine=(id,patch)=>{ if(patch.note) track('note_added'); setWines(ws=>ws.map(w=>w.id===id?{...w,...patch}:w)); db.updateWine(id,patch).catch(e=>console.error('Update failed', e)); };
+  const addWine=async(w)=>{ try{ const saved=await db.insertWine(userId, autoEnrich(w)); setWines(ws=>[saved,...ws]); setOverlay(null); flash('Added to your collection'); track('wine_added', { source:w.source }); }catch(e){ console.error(e); flash('Could not save'); } };
   const addMany=async(arr)=>{ const saved=await db.insertWines(userId, arr.map(autoEnrich)); setWines(ws=>[...saved,...ws]); return saved; };
   const viewToTry=()=>{ setOverlay(null); setTab('collection'); setFilter('totry'); };
   const clearSamples=async()=>{ try{ await db.deleteSamples(); setWines(ws=>ws.filter(w=>!w.sample)); }catch(e){ console.error(e); } };
@@ -128,7 +131,7 @@ function VApp({ session }){
   const explore=(r)=>{ setExploreRegion(r); setOverlay('explore'); };
   const savePairing=async(p)=>{ try{ const sp=await db.insertPairing(userId,p); setPairings(ps=>[sp,...ps]); flash('Saved to My Palate'); }catch(e){ console.error(e); } };
   const addPhoto=async(id,dataUrl)=>{ try{ const url=await db.setWinePhoto(userId,id,dataUrl); setWines(ws=>ws.map(w=>w.id===id?{...w,photo:url}:w)); flash('Photo added'); }catch(e){ console.error('photo upload failed', e); flash('Could not upload photo'); } };
-  const saveDining=async({experience,pairing})=>{ try{ const saved=await db.insertDining(userId,experience); setDining(ds=>[saved,...ds]); }catch(e){ console.error("save dining failed", e); flash("Could not save dining"); } if(pairing){ try{ const sp=await db.insertPairing(userId,pairing); setPairings(ps=>[sp,...ps]); }catch(e){ console.error(e); } } };
+  const saveDining=async({experience,pairing})=>{ try{ const saved=await db.insertDining(userId,experience); setDining(ds=>[saved,...ds]); track('dining_saved'); }catch(e){ console.error("save dining failed", e); flash("Could not save dining"); } if(pairing){ try{ const sp=await db.insertPairing(userId,pairing); setPairings(ps=>[sp,...ps]); }catch(e){ console.error(e); } } };
 
   const navTo=(t)=>{ setOverlay(null); setTab(t); };
   const detail = (overlay&&overlay.detail&&wines)? wines.find(w=>w.id===overlay.detail):null;
@@ -139,7 +142,7 @@ function VApp({ session }){
     <div style={{ position:'relative', height:'100%', width:'100%', background:'#fff', overflow:'hidden' }}>
       {loading && <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}><svg width={30} height={30} viewBox="0 0 24 24" style={{ animation:'wmSpin .8s linear infinite' }}><circle cx="12" cy="12" r="9" fill="none" stroke={T.line2} strokeWidth="2.6"/><path d="M21 12a9 9 0 00-9-9" fill="none" stroke={T.ink} strokeWidth="2.6" strokeLinecap="round"/></svg></div>}
       {!loading && <>
-      {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onShopping={()=>setOverlay('addhub')} onHome={()=>ask('')} onDiningOut={()=>setOverlay('diningout')} onExplore={()=>setTab('learn')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')}/>}
+      {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onShopping={()=>setOverlay('addhub')} onHome={()=>ask('')} onDiningOut={()=>{ track('dining_opened'); setOverlay('diningout'); }} onExplore={()=>setTab('learn')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')}/>}
       {tab==='collection' && <Collection wines={wines} cols={cols} filter={filter} setFilter={setFilter} hasSamples={hasSamples} onClearSamples={clearSamples} onOpen={(id)=>setOverlay({detail:id})} onSearch={()=>ask('')}/>}
       {tab==='palate' && <PalateScreen wines={wines} pairings={pairings} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask}/>}
       {tab==='learn' && <ExploreScreen region={exploreRegion} wines={wines} onPick={setExploreRegion} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask}/>}

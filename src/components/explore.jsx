@@ -6,6 +6,7 @@ import { Icon, VerdictBadge, typeColor } from './ui.jsx';
 import { BottlePhoto } from './bottle.jsx';
 import { V_STATUS, V_NAV } from '../lib/constants.js';
 import { REGIONS, FEATURED } from '../lib/regions.js';
+import { track } from '../lib/analytics.js';
 
 const { useState: eUS, useEffect: eUE } = React;
 const NAMES = Object.keys(REGIONS);
@@ -25,6 +26,8 @@ function ExploreScreen({ wines, onOpenWine, onAsk }){
 
   // Curated-first: while searching, land straight on the top matching region.
   eUE(()=>{ if(q && matches.length && !matches.includes(sel)) setSel(matches[0]); }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
+  eUE(()=>{ track('region_view', { name: sel }); }, [sel]); // eslint-disable-line
+  eUE(()=>{ const s=query.trim(); if(!s) return; const t=setTimeout(()=>track('region_search', { q:s }), 700); return ()=>clearTimeout(t); }, [query]); // eslint-disable-line
 
   const name = REGIONS[sel] ? sel : FEATURED[0];
   const r = REGIONS[name];

@@ -56,7 +56,18 @@ function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, 
           ))}
         </div>
 
-        {/* recently added */}
+        {/* recently added — or a first-run prompt when the cellar is empty */}
+        {recent.length === 0 ? (
+        <div style={{ marginTop:30, borderTop:`1px solid ${T.line2}`, paddingTop:22, paddingBottom:V_NAV+96 }}>
+          <div style={{ border:`1px solid ${T.line}`, borderRadius:18, padding:'22px 20px', background:T.surface }}>
+            <div style={{ fontFamily:'var(--serif)', fontSize:22, fontWeight:500, color:T.ink, letterSpacing:-0.3 }}>Start your cellar</div>
+            <div style={{ fontSize:14.5, color:T.ink2, lineHeight:1.55, marginTop:8 }}>Add a wine you loved — snap the label, search it, or paste an order. Wine Memory remembers how it tasted and whether to buy it again, and your sommelier learns your palate.</div>
+            <button onClick={onShopping} style={{ marginTop:16, width:'100%', padding:'14px', borderRadius:13, border:'none', background:T.ink, color:'#fff', fontFamily:'var(--sans)', fontSize:15, fontWeight:680, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+              <Icon name="plus" size={18} color="#fff"/> Add your first wine
+            </button>
+          </div>
+        </div>
+        ) : (
         <div style={{ marginTop:30, borderTop:`1px solid ${T.line2}`, paddingTop:18, paddingBottom:V_NAV+96 }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
             <span style={{ fontFamily:'var(--sans)', fontSize:10.5, fontWeight:600, letterSpacing:'.24em', textTransform:'uppercase', color:T.ink3 }}>Your Cellar</span>
@@ -72,6 +83,7 @@ function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, 
             ))}
           </div>
         </div>
+        )}
       </div>
     </div>
   );

@@ -7,6 +7,8 @@ import { T } from '../lib/data.js';
 import { Icon, VerdictPicker, typeColor } from './ui.jsx';
 import { Panel, Spinner } from './add.jsx';
 import { supabase } from '../lib/supabase.js';
+import { invokeAI } from '../lib/ai.js';
+import { track } from '../lib/analytics.js';
 import { fileToJpegDataUrl } from '../lib/image.js';
 
 const { useState: snUS, useRef: snUR } = React;
@@ -16,10 +18,7 @@ const WINE_TYPES = ['Red','White','Rosé','Sparkling'];
 // Claude-vision identification via the Edge Function. Throws on failure so the
 // caller can fall back to manual entry / Search a Bottle.
 async function identifyLabel(image){
-  if (!supabase) throw new Error('not configured');
-  const { data, error } = await supabase.functions.invoke('label-identify', { body:{ image } });
-  if (error) throw error;
-  return data;
+  return await invokeAI('label-identify', { image });
 }
 
 function Field({ label, value, onChange, placeholder }){
@@ -46,7 +45,7 @@ function SnapLabel({ onClose, onSave, onSearchInstead, verdictVariant='expressiv
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!file) return;
-    setStep('identifying');
+    setStep('identifying'); track('label_scan');
     try {
       const image = await fileToJpegDataUrl(file);
       setPhoto(image);
