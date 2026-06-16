@@ -13,6 +13,10 @@ body{ font-family:var(--sans); -webkit-font-smoothing:antialiased; text-renderin
 #root, #root *{ font-family:var(--sans); }
 #root ::-webkit-scrollbar{ width:0; height:0; display:none; }
 #root *{ scrollbar-width:none; }
+/* Native-feeling, contained scrolling for every in-app pane: momentum on iOS, and
+   overscroll-behavior:contain so a pane that reaches its end never chains the
+   scroll up to the (locked) page. Makes the whole app behave like a fixed shell. */
+#root *{ -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
 button{ font-family:var(--sans); }
 input, textarea{ font-family:var(--sans); }
 textarea::placeholder, input::placeholder{ color:#9a9aa1; }
