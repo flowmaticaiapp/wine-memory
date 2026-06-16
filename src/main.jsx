@@ -54,7 +54,7 @@ function VToast({ toast }){
 function AccountScreen({ email, provider }){
   const method = provider==='google' ? 'Google' : 'email magic link';
   return (
-    <div style={{ height:'100%', overflow:'auto', background:'#fff' }}>
+    <div style={{ height:'100%', overflowX:'hidden', overflowY:'auto', background:'#fff' }}>
       <div style={{ paddingTop:50 }}/>
       <div style={{ padding:'8px 18px', paddingBottom:160 }}>
         <h1 style={{ margin:0, fontSize:27, fontWeight:780, letterSpacing:-0.9 }}>Account</h1>

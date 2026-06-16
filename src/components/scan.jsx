@@ -80,7 +80,7 @@ function ScanBottles({ onClose, onAddMany, sampleSrc }){
   // ── REVIEW ──
   return (
     <Panel onClose={onClose} title="Review bottles" onBack={()=>setStep('capture')} backLabel="Rescan">
-      <div style={{ flex:1, overflow:'auto', padding:'14px 16px 20px' }}>
+      <div style={{ flex:1, overflowX:'hidden', overflowY:'auto', padding:'14px 16px 20px' }}>
         {photo && <img src={photo} alt="" style={{ width:'100%', height:96, objectFit:'cover', borderRadius:12, border:`1px solid ${T.line2}`, marginBottom:13 }}/>}
         <div style={{ padding:'13px 14px', background:T.canvas, border:`1px solid ${T.line}`, borderRadius:13, marginBottom:14 }}>
           <div style={{ fontSize:13.5, color:T.ink, fontWeight:680, lineHeight:1.4 }}>We identified {items.length} bottles from your photo.</div>
