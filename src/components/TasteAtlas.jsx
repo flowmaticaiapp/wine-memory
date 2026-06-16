@@ -35,7 +35,12 @@ export function TasteAtlas({ wines, onOpenWine, selKey, onSelect }){
   // init map once
   useEffect(()=>{
     if (mapRef.current || !elRef.current) return;
-    const map = L.map(elRef.current, { zoomControl:false, scrollWheelZoom:false, attributionControl:true, worldCopyJump:true });
+    // Contained map: no world-wrapping, and hard bounds so a drag can't fling the
+    // map (or the app frame) into empty space. Pan/zoom stay internal to the map.
+    const map = L.map(elRef.current, {
+      zoomControl:false, scrollWheelZoom:false, attributionControl:true,
+      worldCopyJump:false, maxBounds:[[-85,-180],[85,180]], maxBoundsViscosity:1.0, bounceAtZoomLimits:false,
+    });
     mapRef.current = map;
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       subdomains:'abcd', maxZoom:11, attribution:'© OpenStreetMap, © CARTO',
