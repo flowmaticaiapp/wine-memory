@@ -4,7 +4,10 @@
   --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
 *{ box-sizing:border-box; }
-html,body{ margin:0; padding:0; background:#efece5; }
+/* App-shell lock: the page itself never scrolls (no whole-page rubber-banding or
+   address-bar show/hide); only content inside each screen's own scroll area moves. */
+html,body{ margin:0; padding:0; background:#efece5; height:100%; overflow:hidden; overscroll-behavior:none; }
+#root{ height:100%; }
 #root h1{ font-family:var(--serif); font-weight:500; letter-spacing:-0.01em; }
 body{ font-family:var(--sans); -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
 #root, #root *{ font-family:var(--sans); }
