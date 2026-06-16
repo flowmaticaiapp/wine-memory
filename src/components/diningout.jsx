@@ -250,14 +250,21 @@ function DiningOut({ onClose, onSave }){
         <input value={place} onChange={e=>setPlace(e.target.value)} placeholder="Restaurant name"
           style={{ width:'100%', boxSizing:'border-box', height:46, border:`1px solid ${T.line2}`, borderRadius:12, padding:'0 13px', fontFamily:'var(--sans)', fontSize:15, color:T.ink, outline:'none' }}/>
 
-        {/* wine list paste */}
-        <div style={{ height:22 }}/>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <DLbl>Their wine list <span style={{ textTransform:'none', letterSpacing:0, color:T.ink4 }}>· optional, for exact picks</span></DLbl>
-          {!showPaste && <button onClick={()=>setShowPaste(true)} style={{ background:'none', border:'none', color:T.ink2, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:'var(--sans)' }}>Paste</button>}
-        </div>
-        {showPaste && <textarea value={listText} onChange={e=>setListText(e.target.value)} rows={4} placeholder="Type or paste a few wines from their list, one per line…"
-          style={{ width:'100%', boxSizing:'border-box', border:`1px solid ${T.line2}`, borderRadius:12, padding:'12px', fontFamily:'var(--mono)', fontSize:12.5, lineHeight:1.5, color:T.ink, resize:'none', outline:'none', background:T.canvas }}/>}
+        {/* wine list — the photo is the primary path; paste is a discreet fallback */}
+        {!list.length && !showPaste && (
+          <div style={{ marginTop:20, textAlign:'center' }}>
+            <button onClick={()=>setShowPaste(true)} style={{ display:'inline-flex', alignItems:'center', gap:7, background:'none', border:'none', cursor:'pointer', color:T.ink3, fontFamily:'var(--sans)', fontSize:12.5, fontWeight:560, padding:'4px 8px' }}>
+              <Icon name="paste" size={15} color={T.ink3}/> No wine list photo? Paste instead
+            </button>
+          </div>
+        )}
+        {showPaste && (
+          <div style={{ marginTop:18 }}>
+            <DLbl>Paste their wine list <span style={{ textTransform:'none', letterSpacing:0, color:T.ink4 }}>· one per line</span></DLbl>
+            <textarea autoFocus value={listText} onChange={e=>setListText(e.target.value)} rows={4} placeholder="Type or paste a few wines from their list, one per line…"
+              style={{ width:'100%', boxSizing:'border-box', border:`1px solid ${T.line2}`, borderRadius:12, padding:'12px', fontFamily:'var(--mono)', fontSize:12.5, lineHeight:1.5, color:T.ink, resize:'none', outline:'none', background:T.canvas }}/>
+          </div>
+        )}
       </div>
       <div style={{ flexShrink:0, padding:'12px 18px calc(14px + env(safe-area-inset-bottom))', borderTop:`1px solid ${T.line}`, background:'#fff' }}>
         <button onClick={go} disabled={!dish.trim()} style={{ width:'100%', padding:'16px', borderRadius:14, border:'none', cursor:dish.trim()?'pointer':'default', background:dish.trim()?T.ink:T.raised, color:dish.trim()?'#fff':T.ink4, fontFamily:'var(--sans)', fontSize:15.5, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
