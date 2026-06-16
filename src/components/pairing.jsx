@@ -1,7 +1,8 @@
 // pairing.jsx — teaching sommelier: Food → Style → Region → Bottle.
 // Layer 1: human-friendly style + why + regional deep-dive (educational).
 // Layer 2: the bottles you already own that match that style.
-// Real intelligence via window.claude.complete, heuristic fallback offline.
+// Real intelligence via the `sommelier` Supabase Edge Function (Claude). The
+// model classifies pairing vs. general questions; heuristic pairing fallback offline.
 // Ported from app/pairing.jsx.
 import React from 'react';
 import { T, styleLabel } from '../lib/data.js';
@@ -9,6 +10,7 @@ import { Icon, VerdictBadge } from './ui.jsx';
 import { BottlePhoto, typeHue } from './bottle.jsx';
 import { Spinner } from './add.jsx';
 import { V_STATUS } from '../lib/constants.js';
+import { supabase } from '../lib/supabase.js';
 
 const { useState: pUS, useEffect: pUE, useRef: pUR } = React;
 
@@ -75,26 +77,21 @@ function heuristicPairing(query){
   return { dish:rule.dish, primary:rule.primary, others:rule.others, limit:priceLimit(query), avoid:rule.avoid||[] };
 }
 
-async function aiPairing(query, wines){
+// Build the personalization payload the sommelier function expects.
+function collectionSummary(wines){
   const owned = wines.map(w=>({ grape:w.grape||'', region:(w.region||'')+(w.country?', '+w.country:''), verdict:w.verdict }));
   const gc={}; wines.forEach(w=>{ if(w.grape) gc[w.grape]=(gc[w.grape]||0)+1; });
   const ownedGrapes = Object.entries(gc).map(([g,n])=>g+' ('+n+')').join(', ') || 'none yet';
-  const prompt = `You are a wine teacher inside a personal wine app. Answer the user's pairing question so they LEARN, following Food → Style → Region → Bottle.
+  return { owned, ownedGrapes };
+}
 
-The user OWNS these grapes/styles: ${ownedGrapes}
-Full collection: ${JSON.stringify(owned)}
-
-Make the PRIMARY recommendation a human-friendly GRAPE/STYLE (e.g. "Pinot Noir", "Malbec", "Sauvignon Blanc") — never a producer name. STRONGLY PREFER a style the user already owns if it genuinely fits the dish, so they can drink something they have; only pick a style they don't own if nothing they own fits well. Explain why that style works in plain language, then give a regional deep-dive (e.g. "Oregon Pinot Noir / Willamette Valley") with what to expect, then 2 OTHER styles that also work.
-For delicate/creamy/herb dishes prefer light, high-acid styles (Pinot Noir, Sauvignon Blanc, Vermentino); do NOT lead with heavy reds (Cabernet, Malbec, Zinfandel, Syrah) unless the dish is rich red meat.
-GROUNDING (critical): your "why" and "deeper" text must reference ONLY ingredients, sauces, cooking methods, or flavours that are present in, or reasonably inferred from, the question. Never introduce a protein or dish the user did not state — e.g. do not mention steak, red meat, ribeye, chimichurri, or "fat and char" unless the user actually wrote them. Set matchGrapes to include the primary grape plus any closely related grape the user might own.
-
-Respond with ONLY JSON:
-{"dish":"<short dish name>","primary":{"grape":"<grape/style>","why":"<2 sentences, plain language>","deeperTitle":"<Region Grape>","deeper":"<2 sentences on the region and what to expect>","matchGrapes":["<grape>","<related grape>"]},"others":[{"grape":"<grape/style>","why":"<one sentence>"},{"grape":"<grape/style>","why":"<one sentence>"}]}
-
-QUESTION: "${query}"`;
-  const raw = await window.claude.complete(prompt);
-  const parsed = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
-  return { dish:parsed.dish, primary:parsed.primary, others:parsed.others||[], limit:priceLimit(query), avoid:[] };
+// Ask the real sommelier (Supabase Edge Function → Claude). The model classifies
+// the question; returns { kind:'pairing', dish, primary, others } or { kind:'answer', text }.
+async function askSommelier(query, wines){
+  const { owned, ownedGrapes } = collectionSummary(wines);
+  const { data, error } = await supabase.functions.invoke('sommelier', { body:{ query, owned, ownedGrapes } });
+  if (error) throw error;
+  return data;
 }
 
 function ownedMatches(result, wines){
@@ -147,18 +144,6 @@ function AnswerText({ text }){
       </div> ); })}
   </div>;
 }
-async function generalAnswer(query, wines){
-  if (window.claude && window.claude.complete){
-    try {
-      const grapes=[...new Set(wines.filter(w=>w.grape).map(w=>w.grape))].slice(0,8).join(', ');
-      const prompt = `You are a warm, concise wine expert inside a personal wine app. Answer the user's question in plain, friendly language — 2 to 4 short sentences, or up to 4 short bullet lines (start each with "- ") for comparisons or lists. No preamble, no fluff, no markdown headers. If genuinely relevant you may note the user owns: ${grapes||'a few wines'}. Question: "${query}"`;
-      const txt = await window.claude.complete(prompt);
-      return (txt||'').trim();
-    } catch(e){}
-  }
-  return 'I can answer that with live AI in the full app. For now, pairing questions work offline — try “what should I drink with steak?” or tap a situation card.';
-}
-
 function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
   const [q, setQ] = pUS('');
   const [phase, setPhase] = pUS('idle');   // idle | thinking | pairing | search
@@ -170,17 +155,30 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
   const run = async (query)=>{
     const Q = (query!=null?query:q).trim(); if(!Q) return;
     setAsked(Q); setQ(Q); setPhase('thinking');
-    if (isPairingQuery(Q)){
-      try {
-        let out;
-        if (window.claude && window.claude.complete){ try { out = await aiPairing(Q, wines); } catch(e){ out = heuristicPairing(Q); } }
-        else out = heuristicPairing(Q);
+    try {
+      if (!supabase) throw new Error('not configured');
+      const r = await askSommelier(Q, wines);   // model classifies pairing vs. answer
+      if (r && r.kind==='pairing' && r.primary){
+        const out = { dish:r.dish||Q, primary:r.primary, others:r.others||[], avoid:[], limit:priceLimit(Q) };
         setData({ mode:'pairing', ...out, owned:ownedMatches(out, wines) });
         setPhase('pairing');
-      } catch(e){ const out=heuristicPairing(Q); setData({ mode:'pairing', ...out, owned:ownedMatches(out, wines) }); setPhase('pairing'); }
-    } else {
-      try { const txt = await generalAnswer(Q, wines); setData({ mode:'answer', text:txt }); setPhase('answer'); }
-      catch(e){ setData({ mode:'answer', text:'Sorry — I couldn’t answer that just now. Try rephrasing.' }); setPhase('answer'); }
+      } else if (r && r.kind==='answer' && (r.text||'').trim()){
+        setData({ mode:'answer', text:r.text.trim() });
+        setPhase('answer');
+      } else {
+        throw new Error('empty sommelier result');
+      }
+    } catch(e){
+      console.error('sommelier failed', e);
+      // Graceful offline fallback: pairing questions still get a useful answer.
+      if (isPairingQuery(Q)){
+        const out = heuristicPairing(Q);
+        setData({ mode:'pairing', ...out, owned:ownedMatches(out, wines) });
+        setPhase('pairing');
+      } else {
+        setData({ mode:'answer', text:'Sorry — I couldn’t reach the sommelier just now. Please try again in a moment.' });
+        setPhase('answer');
+      }
     }
   };
   pUE(()=>{ setSaved(false); }, [asked]);

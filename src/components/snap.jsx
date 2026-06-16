@@ -1,26 +1,25 @@
-// snap.jsx — Snap a Label (V1): capture a real photo + AI-identify + confirm + save.
-// The photo becomes the wine's actual image. Identification uses Claude from the
-// label text you confirm (vision OCR is the future upgrade). Honest no-match fallback.
+// snap.jsx — Snap a Label: capture a real photo, identify the wine with Claude
+// vision (via the `label-identify` Edge Function), confirm/edit, then save. The
+// photo becomes the bottle's image. Low confidence offers Search a Bottle instead.
 // Ported from app/snap.jsx.
 import React from 'react';
 import { T } from '../lib/data.js';
 import { Icon, VerdictPicker, typeColor } from './ui.jsx';
 import { Panel, Spinner } from './add.jsx';
+import { supabase } from '../lib/supabase.js';
+import { fileToJpegDataUrl } from '../lib/image.js';
 
 const { useState: snUS, useRef: snUR } = React;
 const snToday = ()=> new Date().toISOString().slice(0,10);
 const WINE_TYPES = ['Red','White','Rosé','Sparkling'];
 
-async function snapIdentify(text, vintage){
-  if (window.claude && window.claude.complete){
-    try {
-      const prompt = `Identify this wine from the words written on its label. Give your best structured guess.\nLabel text: "${text}"${vintage?`\nVintage on label: ${vintage}`:''}\nRespond with ONLY JSON: {"found":true|false,"producer":"","name":"","vintage":<number or "NV">,"type":"Red|White|Rosé|Sparkling|Dessert|Fortified","grape":"","region":"","country":""}\nFill the fields you're reasonably confident about. If you cannot identify the specific wine, set "found":false and fill only what is certain (e.g. type).`;
-      const j = JSON.parse((await window.claude.complete(prompt)).match(/\{[\s\S]*\}/)[0]);
-      return j;
-    } catch(e){ /* fall through */ }
-  }
-  const words = text.trim().split(/\s+/);
-  return { found:false, producer:words.slice(0,2).join(' '), name:text.trim(), vintage:vintage||'NV', type:'Red', grape:'', region:'', country:'' };
+// Claude-vision identification via the Edge Function. Throws on failure so the
+// caller can fall back to manual entry / Search a Bottle.
+async function identifyLabel(image){
+  if (!supabase) throw new Error('not configured');
+  const { data, error } = await supabase.functions.invoke('label-identify', { body:{ image } });
+  if (error) throw error;
+  return data;
 }
 
 function Field({ label, value, onChange, placeholder }){
@@ -33,45 +32,56 @@ function Field({ label, value, onChange, placeholder }){
   );
 }
 
-function SnapLabel({ onClose, onSave, verdictVariant='expressive' }){
-  const [step, setStep] = snUS('capture');   // capture | label | identifying | confirm
+function SnapLabel({ onClose, onSave, onSearchInstead, verdictVariant='expressive' }){
+  const [step, setStep] = snUS('capture');   // capture | identifying | confirm
   const [photo, setPhoto] = snUS(null);
-  const [labelText, setLabelText] = snUS('');
-  const [vin, setVin] = snUS('');
   const [f, setF] = snUS(null);               // identified fields (editable)
   const [verdict, setVerdict] = snUS(null);
   const [note, setNote] = snUS('');
   const fileRef = snUR(null);
 
-  const onFile = (e)=>{ const file=e.target.files&&e.target.files[0]; if(!file) return;
-    const rd=new FileReader(); rd.onload=()=>{ setPhoto(rd.result); setStep('label'); }; rd.readAsDataURL(file); };
-
-  const identify = async ()=>{
+  // Photo → downscaled JPEG → Claude-vision identify → confirm/edit. On failure,
+  // still land on confirm with blank fields so the user can type or search instead.
+  const onFile = async (e)=>{
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
     setStep('identifying');
-    const r = await snapIdentify(labelText, vin);
-    setF({ found:!!r.found, producer:r.producer||'', name:r.name||labelText, vintage:r.vintage||(vin||'NV'),
-      type:WINE_TYPES.includes(r.type)?r.type:'Red', grape:r.grape||'', region:r.region||'', country:r.country||'' });
-    setStep('confirm');
+    try {
+      const image = await fileToJpegDataUrl(file);
+      setPhoto(image);
+      const r = await identifyLabel(image);
+      setF({ found:!!r.found, confidence:r.confidence||'low', producer:r.producer||'', name:r.name||'',
+        vintage:r.vintage||'NV', type:WINE_TYPES.includes(r.type)?r.type:(r.type||'Red'), grape:r.grape||'',
+        region:r.region||'', country:r.country||'', lat:r.lat, lng:r.lng });
+      setStep('confirm');
+    } catch(err){
+      console.error('label-identify failed', err);
+      setF({ found:false, confidence:'low', producer:'', name:'', vintage:'NV', type:'Red', grape:'', region:'', country:'', error:true });
+      setStep('confirm');
+    }
   };
 
   const save = ()=>{
+    const hasLoc = f && f.lng!=null && f.lat!=null;
     onSave({ id:'w'+Date.now(), photo, producer:f.producer||'Unknown producer', name:f.name||'Unknown wine',
-      vintage:f.vintage||'NV', type:f.type, grape:f.grape, region:f.region, country:f.country, loc:[2,46],
+      vintage:f.vintage||'NV', type:f.type, grape:f.grape, region:f.region, country:f.country, ...(hasLoc?{loc:[f.lng,f.lat]}:{}),
       verdict: verdict||'totry', tags:[], note, where:'home', source:'Snap a label', price:null, added:snToday(), sample:false });
   };
+  const lowConfidence = f && (!f.found || f.confidence==='low' || f.error);
 
   // ── CAPTURE ──
   if (step==='capture') return (
     <Panel onClose={onClose} title="Snap a label">
       <div style={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'center', padding:'24px 22px' }}>
-        <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onFile} style={{ display:'none' }}/>
+        <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{ display:'none' }}/>
         <button onClick={()=>fileRef.current && fileRef.current.click()} style={{ width:'100%', aspectRatio:'4/5', maxHeight:360, borderRadius:18, border:`2px dashed ${T.line2}`, background:T.canvas, cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14 }}>
           <span style={{ width:64, height:64, borderRadius:99, background:'#fff', border:`1px solid ${T.line2}`, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 14px rgba(17,17,19,0.06)' }}><Icon name="camera" size={30} color={T.ink}/></span>
           <span style={{ fontSize:16, fontWeight:700, color:T.ink }}>Take a photo of the label</span>
           <span style={{ fontSize:13, color:T.ink3 }}>or choose one from your library</span>
         </button>
         <div style={{ marginTop:16, fontSize:12.5, color:T.ink4, lineHeight:1.5, display:'flex', gap:8 }}>
-          <Icon name="sparkle" size={15} color={T.ink4}/> Your photo becomes the bottle’s image. Next, confirm a few words on the label so we can identify the wine.</div>
+          <Icon name="sparkle" size={15} color={T.ink4}/> Your photo becomes the bottle’s image — we’ll read the label with AI to identify the wine. You can confirm the details next.</div>
       </div>
     </Panel>
   );
@@ -87,38 +97,27 @@ function SnapLabel({ onClose, onSave, verdictVariant='expressive' }){
     </Panel>
   );
 
-  // ── LABEL TEXT ──
-  if (step==='label') return (
-    <Panel onClose={onClose} title="Snap a label" onBack={()=>setStep('capture')} backLabel="Retake">
-      <div style={{ flex:1, overflow:'auto', padding:'18px 20px 30px' }}>
-        {photo && <div style={{ display:'flex', justifyContent:'center', marginBottom:18 }}><img src={photo} alt="label" style={{ maxHeight:200, maxWidth:'70%', borderRadius:14, border:`1px solid ${T.line2}`, objectFit:'cover' }}/></div>}
-        <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.4, textTransform:'uppercase', marginBottom:9 }}>What does the label say?</div>
-        <input autoFocus value={labelText} onChange={e=>setLabelText(e.target.value)} placeholder="e.g. Domaine Tempier Bandol"
-          style={{ width:'100%', boxSizing:'border-box', height:48, border:`1.5px solid ${labelText?T.ink:T.line2}`, borderRadius:12, padding:'0 13px', fontFamily:'var(--sans)', fontSize:16, color:T.ink, outline:'none' }}/>
-        <div style={{ marginTop:11, fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.4, textTransform:'uppercase', marginBottom:9 }}>Vintage <span style={{ textTransform:'none', letterSpacing:0, color:T.ink4 }}>· optional</span></div>
-        <input value={vin} onChange={e=>setVin(e.target.value.replace(/[^0-9]/g,'').slice(0,4))} placeholder="2021" inputMode="numeric"
-          style={{ width:120, boxSizing:'border-box', height:44, border:`1px solid ${T.line2}`, borderRadius:10, padding:'0 12px', fontFamily:'var(--mono)', fontSize:15, color:T.ink, outline:'none' }}/>
-        <div style={{ marginTop:16, fontSize:12.5, color:T.ink4, lineHeight:1.5 }}>Auto-reading the label from the photo arrives with the camera/vision update. For now, a couple of words is all we need.</div>
-      </div>
-      <div style={{ flexShrink:0, padding:'12px 18px calc(14px + env(safe-area-inset-bottom))', borderTop:`1px solid ${T.line}`, background:'#fff' }}>
-        <button onClick={identify} disabled={!labelText.trim()} style={{ width:'100%', padding:'16px', borderRadius:14, border:'none', cursor:labelText.trim()?'pointer':'default', background:labelText.trim()?T.ink:T.raised, color:labelText.trim()?'#fff':T.ink4, fontFamily:'var(--sans)', fontSize:15.5, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-          <Icon name="sparkle" size={18} color={labelText.trim()?'#fff':T.ink4}/> Identify wine</button>
-      </div>
-    </Panel>
-  );
-
   // ── CONFIRM ──
   const tc = typeColor(f.type);
+  const status = (f.found && f.confidence==='high') ? { bg:T.buyBg, fg:T.buy, icon:'sparkle', label:'AI IDENTIFIED — CONFIRM' }
+    : (f.found && f.confidence==='medium') ? { bg:T.maybeBg, fg:T.maybe, icon:'sparkle', label:'LIKELY MATCH — CHECK DETAILS' }
+    : { bg:T.maybeBg, fg:T.maybe, icon:'edit', label: f.error ? 'COULDN’T READ — ADD DETAILS' : 'COULDN’T IDENTIFY — ADD DETAILS' };
   return (
-    <Panel onClose={onClose} title="Confirm & save" onBack={()=>setStep('label')} backLabel="Back">
+    <Panel onClose={onClose} title="Confirm & save" onBack={()=>setStep('capture')} backLabel="Retake">
       <div style={{ flex:1, overflow:'auto', padding:'18px 20px 30px' }}>
         {/* photo + status */}
         <div style={{ display:'flex', gap:14, alignItems:'center', marginBottom:16 }}>
           {photo && <img src={photo} alt="" style={{ width:64, height:80, borderRadius:11, objectFit:'cover', border:`1px solid ${T.line2}`, flexShrink:0 }}/>}
           <div style={{ display:'inline-flex', alignItems:'center', gap:6, fontFamily:'var(--mono)', fontSize:10.5, letterSpacing:0.3, padding:'5px 10px', borderRadius:7,
-            background:f.found?T.buyBg:T.maybeBg, color:f.found?T.buy:T.maybe }}>
-            <Icon name={f.found?'sparkle':'edit'} size={13} color={f.found?T.buy:T.maybe}/>{f.found?'AI IDENTIFIED — CONFIRM':'NOT SURE — ADD DETAILS'}</div>
+            background:status.bg, color:status.fg }}>
+            <Icon name={status.icon} size={13} color={status.fg}/>{status.label}</div>
         </div>
+
+        {/* low-confidence: offer Search a Bottle instead */}
+        {lowConfidence && onSearchInstead && (
+          <button onClick={onSearchInstead} style={{ width:'100%', marginBottom:16, padding:'12px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+            <Icon name="search" size={16} color={T.ink}/> Search by name instead</button>
+        )}
 
         <Field label="Producer" value={f.producer} onChange={v=>setF({...f,producer:v})} placeholder="Producer"/>
         <Field label="Wine name" value={f.name} onChange={v=>setF({...f,name:v})} placeholder="Wine name"/>

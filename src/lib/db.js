@@ -55,6 +55,14 @@ export async function updateWine(id, patch){
   if (error) throw error;
 }
 
+// Upload a (base64 data URL) photo and attach it to an existing wine.
+export async function setWinePhoto(userId, id, dataUrl){
+  const url = await maybeUploadPhoto(userId, dataUrl);
+  const { error } = await supabase.from('wines').update({ photo: url }).eq('id', id);
+  if (error) throw error;
+  return url;
+}
+
 export async function deleteSamples(){
   const { error } = await supabase.from('wines').delete().eq('sample', true);
   if (error) throw error;

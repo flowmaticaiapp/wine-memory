@@ -14,7 +14,6 @@ import { PalateScreen } from './components/palate.jsx';
 import { ExploreScreen } from './components/explore.jsx';
 import { AddHub, SearchAdd, OrderImport } from './components/add.jsx';
 import { SnapLabel } from './components/snap.jsx';
-import { ScanBottles } from './components/scan.jsx';
 import { PairingSearch } from './components/pairing.jsx';
 import { DiningOut } from './components/diningout.jsx';
 import { supabase, supabaseConfigured } from './lib/supabase.js';
@@ -122,16 +121,16 @@ function VApp({ session }){
   const updateWine=(id,patch)=>{ setWines(ws=>ws.map(w=>w.id===id?{...w,...patch}:w)); db.updateWine(id,patch).catch(e=>console.error('Update failed', e)); };
   const addWine=async(w)=>{ try{ const saved=await db.insertWine(userId, autoEnrich(w)); setWines(ws=>[saved,...ws]); setOverlay(null); flash('Added to your collection'); }catch(e){ console.error(e); flash('Could not save'); } };
   const addMany=async(arr)=>{ const saved=await db.insertWines(userId, arr.map(autoEnrich)); setWines(ws=>[...saved,...ws]); return saved; };
-  const scanAdd=async(arr)=>{ try{ await addMany(arr); setOverlay(null); setTab('collection'); setFilter('totry'); flash(`${arr.length} ${arr.length===1?'wine':'wines'} added to To Try`); }catch(e){ console.error(e); flash('Could not save'); } };
   const viewToTry=()=>{ setOverlay(null); setTab('collection'); setFilter('totry'); };
   const clearSamples=async()=>{ try{ await db.deleteSamples(); setWines(ws=>ws.filter(w=>!w.sample)); }catch(e){ console.error(e); } };
   const ask=(q)=>{ setSeed(q||''); setOverlay('search'); };
   const explore=(r)=>{ setExploreRegion(r); setOverlay('explore'); };
   const savePairing=async(p)=>{ try{ const sp=await db.insertPairing(userId,p); setPairings(ps=>[sp,...ps]); flash('Saved to My Palate'); }catch(e){ console.error(e); } };
+  const addPhoto=async(id,dataUrl)=>{ try{ const url=await db.setWinePhoto(userId,id,dataUrl); setWines(ws=>ws.map(w=>w.id===id?{...w,photo:url}:w)); flash('Photo added'); }catch(e){ console.error('photo upload failed', e); flash('Could not upload photo'); } };
   const saveDining=async({experience,pairing})=>{ setDining(ds=>[newDiningExperience(experience),...ds]); if(pairing){ try{ const sp=await db.insertPairing(userId,pairing); setPairings(ps=>[sp,...ps]); }catch(e){ console.error(e); } } };
 
   const detail = (overlay&&overlay.detail&&wines)? wines.find(w=>w.id===overlay.detail):null;
-  const fullPanel = ['searchadd','import','search','diningout','snap','scan'].includes(overlay);
+  const fullPanel = ['searchadd','import','search','diningout','snap'].includes(overlay);
   const hasSamples = wines? wines.some(w=>w.sample) : false;
 
   const screen = (
@@ -146,14 +145,13 @@ function VApp({ session }){
 
       {!detail && !fullPanel && (<><VNav tab={tab} setTab={setTab}/><VFAB onClick={()=>setOverlay('addhub')}/></>)}
 
-      {overlay==='addhub' && <AddHub onClose={()=>setOverlay(null)} onSearch={()=>setOverlay('searchadd')} onImport={()=>setOverlay('import')} onSnap={()=>setOverlay('snap')} onScan={()=>setOverlay('scan')}/>}
-      {overlay==='snap' && <SnapLabel onClose={()=>setOverlay(null)} onSave={addWine} verdictVariant={t.verdictStyle}/>}
-      {overlay==='scan' && <ScanBottles onClose={()=>setOverlay(null)} onAddMany={scanAdd} sampleSrc="app/scan-demo.jpg"/>}
+      {overlay==='addhub' && <AddHub onClose={()=>setOverlay(null)} onSearch={()=>setOverlay('searchadd')} onImport={()=>setOverlay('import')} onSnap={()=>setOverlay('snap')}/>}
+      {overlay==='snap' && <SnapLabel onClose={()=>setOverlay(null)} onSave={addWine} onSearchInstead={()=>setOverlay('searchadd')} verdictVariant={t.verdictStyle}/>}
       {overlay==='searchadd' && <SearchAdd onClose={()=>setOverlay(null)} onSave={addWine} verdictVariant={t.verdictStyle}/>}
       {overlay==='import' && <OrderImport onClose={()=>setOverlay(null)} onAddMany={addMany} onViewToTry={viewToTry}/>}
       {overlay==='search' && <PairingSearch wines={wines} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
       {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining}/>}
-      {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} verdictVariant={t.verdictStyle}/>}
+      {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} onAddPhoto={addPhoto} verdictVariant={t.verdictStyle}/>}
       </>}
 
       <VToast toast={toast}/>
@@ -173,8 +171,10 @@ function VApp({ session }){
   );
 
   // Mobile: the app IS the screen, full-bleed (no simulated device frame).
+  // Screens already reserve V_STATUS(50) of top space; on taller notches we top up
+  // the difference so content clears the status bar without double-counting.
   if (isMobile) return (
-    <div style={{ position:'relative', width:'100%', height:'100dvh', background:'#fff', overflow:'hidden' }}>
+    <div style={{ position:'relative', width:'100%', height:'100dvh', background:'#fff', overflow:'hidden', boxSizing:'border-box', paddingTop:'max(0px, calc(env(safe-area-inset-top) - 50px))' }}>
       {screen}
       {tweaks}
     </div>
