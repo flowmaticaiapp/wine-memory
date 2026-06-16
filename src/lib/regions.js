@@ -179,4 +179,42 @@ export const REGIONS = {
     taste:'The world’s southernmost wine region, in New Zealand’s mountainous interior. Intense sunlight and cold nights give vivid, perfumed Pinot Noir — dark cherry, wild thyme and silky depth.',
     pairs:['Duck','Lamb','Salmon','Mushrooms'],
     prompts:['Why is Central Otago good for Pinot Noir?','How does it compare to Burgundy?','What should I buy if I like bold Pinot?'] },
+
+  // ── France (wave 3) ─────────────────────────────────────────────────
+  'Provence': { country:'France', grapes:['Grenache','Cinsault','Mourvèdre'], keys:['provence','bandol','côtes de provence'],
+    taste:'Sun-baked southern France, the spiritual home of dry rosé. Pale, crisp and bone-dry — strawberry, citrus and a saline, herbal lift. (Bandol also makes serious Mourvèdre reds.)',
+    pairs:['Salads','Grilled fish','Niçoise','Summer dishes'],
+    prompts:['Why is Provence rosé so pale?','Is rosé always sweet?','What should I drink with summer food?'] },
+  'Languedoc':{ country:'France', grapes:['Syrah','Grenache','Carignan'], keys:['languedoc','roussillon','corbières','minervois'],
+    taste:'A vast, sunny sweep of southern France and a treasure trove of value. Warm, herby, garrigue-scented reds from Rhône grapes — generous and food-friendly at gentle prices.',
+    pairs:['Grilled meats','Stews','Sausages','Hard cheese'],
+    prompts:['What is garrigue?','Why is the Languedoc such good value?','What should I buy for an everyday red?'] },
+
+  // ── Portugal (wave 3) ───────────────────────────────────────────────
+  'Vinho Verde':{ country:'Portugal', grapes:['Alvarinho','Loureiro'], keys:['vinho verde','minho'],
+    taste:'Portugal’s cool, green northwest. Light, low-alcohol, often faintly spritzy whites — zesty lime and green apple, made for sunshine and seafood.',
+    pairs:['Shellfish','Grilled sardines','Salads','Sushi'],
+    prompts:['Why is Vinho Verde slightly fizzy?','Is Vinho Verde sweet?','What should I drink on a hot day?'] },
+
+  // ── Australia (wave 3) ──────────────────────────────────────────────
+  'Margaret River':{ country:'Australia', grapes:['Cabernet Sauvignon','Chardonnay'], keys:['margaret river'],
+    taste:'A maritime corner of Western Australia with a Bordeaux-like climate. Refined, structured Cabernet and some of Australia’s finest Chardonnay — elegance over sheer power.',
+    pairs:['Steak','Lamb','Roast chicken','Hard cheese'],
+    prompts:['Why is Margaret River compared to Bordeaux?','What makes its Chardonnay special?','What should I buy if I like refined Cabernet?'] },
+
+  // ── Chile (wave 3) ──────────────────────────────────────────────────
+  'Maipo Valley':{ country:'Chile', grapes:['Cabernet Sauvignon','Carmenère'], keys:['maipo','chile'],
+    taste:'Chile’s classic valley near Santiago, in the shadow of the Andes. Cabernet here is ripe but firm with a signature minty, blackcurrant edge; Carmenère adds a savoury, herbal note.',
+    pairs:['Steak','Grilled meats','Burgers','Aged cheese'],
+    prompts:['What is Carmenère?','How does Chilean Cabernet taste?','What should I buy for great-value reds?'] },
+  'Casablanca Valley':{ country:'Chile', grapes:['Sauvignon Blanc','Chardonnay','Pinot Noir'], keys:['casablanca','san antonio'],
+    taste:'A cool, coastal Chilean valley swept by Pacific fog. Crisp, zesty Sauvignon Blanc and Chardonnay plus bright Pinot Noir — fresher and leaner than Chile’s warm interior.',
+    pairs:['Seafood','Salads','Roast chicken','Goat cheese'],
+    prompts:['Why is Casablanca cooler than the rest of Chile?','What whites should I try from Chile?','What should I buy if I like crisp Sauvignon Blanc?'] },
+
+  // ── South Africa (wave 3) ───────────────────────────────────────────
+  'Stellenbosch':{ country:'South Africa', grapes:['Cabernet Sauvignon','Chenin Blanc','Pinotage'], keys:['stellenbosch','south africa'],
+    taste:'South Africa’s red-wine heartland near Cape Town. Polished Cabernet and Bordeaux blends, characterful old-vine Chenin Blanc, and the country’s own smoky Pinotage.',
+    pairs:['Grilled meats','Lamb','Braai / BBQ','Hard cheese'],
+    prompts:['What is Pinotage?','What is South African Chenin Blanc like?','What should I buy if I like Cabernet?'] },
 };
