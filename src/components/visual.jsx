@@ -165,6 +165,7 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
     catch(err){ console.error('add photo failed', err); }
     finally { setPhotoBusy(false); }
   };
+  const triggerPhoto = ()=>{ if(!photoBusy && photoInputRef.current) photoInputRef.current.click(); };
   const fam = famOf(wine.family);
   const accent = `hsl(${fam.hue} 55% 46%)`;
   const tc = typeColor(wine.type);
@@ -175,7 +176,19 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
       <div style={{ flex:1, overflow:'auto' }}>
         {/* hero */}
         <div style={{ position:'relative' }}>
-          <BottlePhoto wine={wine} w={DEVICE_W} h={300} rounded={0} flat/>
+          <input ref={photoInputRef} type="file" accept="image/*" onChange={onPhotoFile} style={{ display:'none' }}/>
+          {wine.photo ? (<>
+            <BottlePhoto wine={wine} w={DEVICE_W} h={300} rounded={0} flat/>
+            {/* Change-photo: always available, high-contrast on any image. */}
+            <button onClick={triggerPhoto} disabled={photoBusy} style={{ position:'absolute', bottom:14, right:16, display:'flex', alignItems:'center', gap:7, background:'rgba(17,17,19,0.62)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', border:'none', borderRadius:99, padding:'9px 15px', cursor:photoBusy?'default':'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.18)', fontFamily:'var(--sans)', fontSize:13, fontWeight:640, color:'#fff' }}><Icon name="camera" size={16} color="#fff"/> {photoBusy?'Uploading…':'Change photo'}</button>
+          </>) : (
+            /* No photo: the whole hero is a first-class "Add a photo" call to action. */
+            <button onClick={triggerPhoto} disabled={photoBusy} aria-label="Add a photo" style={{ width:'100%', height:300, border:'none', cursor:photoBusy?'default':'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:11, background:`hsl(${fam.hue} 32% 95%)`, padding:0 }}>
+              <span style={{ width:66, height:66, borderRadius:99, background:'#fff', border:`1px solid hsl(${fam.hue} 40% 86%)`, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 6px 18px rgba(17,17,19,0.10)' }}><Icon name="camera" size={29} color={accent}/></span>
+              <span style={{ fontSize:16.5, fontWeight:740, color:T.ink, letterSpacing:-0.2 }}>{photoBusy?'Uploading…':'Add a photo'}</span>
+              <span style={{ fontSize:13, color:T.ink3 }}>Tap to add this bottle’s photo</span>
+            </button>
+          )}
           <div style={{ position:'absolute', top:V_STATUS, left:14 }}>
             <button onClick={onBack} style={{ width:40, height:40, borderRadius:99, border:'none', cursor:'pointer', background:'rgba(255,255,255,0.9)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 2px 8px rgba(0,0,0,0.1)' }}><Icon name="back" size={21} color={T.ink}/></button>
           </div>
@@ -183,10 +196,6 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
             <VerdictBadge id={wine.verdict} variant="expressive"/>
             {wine.sample && <span style={{ fontFamily:'var(--mono)', fontSize:9.5, fontWeight:600, color:'#fff', background:'rgba(17,17,19,0.6)', padding:'3px 8px', borderRadius:6, letterSpacing:0.4, textTransform:'uppercase' }}>Sample</span>}
           </div>
-          {!wine.photo && <>
-            <input ref={photoInputRef} type="file" accept="image/*" onChange={onPhotoFile} style={{ display:'none' }}/>
-            <button onClick={()=>!photoBusy && photoInputRef.current && photoInputRef.current.click()} disabled={photoBusy} style={{ position:'absolute', bottom:14, right:16, display:'flex', alignItems:'center', gap:7, background:'#fff', border:`1px solid ${T.line2}`, borderRadius:99, padding:'8px 14px', cursor:photoBusy?'default':'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.08)', fontFamily:'var(--sans)', fontSize:13, fontWeight:620, color:T.ink }}><Icon name="camera" size={16} color={T.ink}/> {photoBusy?'Uploading…':'Add photo'}</button>
-          </>}
         </div>
 
         <div style={{ padding:'20px 20px 0' }}>
