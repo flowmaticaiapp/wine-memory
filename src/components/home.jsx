@@ -35,9 +35,11 @@ function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, 
           <span style={{ flex:1, fontFamily:'var(--sans)', fontSize:15.5, color:T.ink3 }}>Ask your sommelier…</span>
           <Icon name="arrow" size={19} color={T.ink}/>
         </button>
-        <div style={{ display:'flex', gap:9, overflowX:'auto', margin:'13px -28px 0', padding:'0 28px 2px' }}>
+        {/* Contained, wrapping chips — no full-bleed scroll, so nothing is cut off
+            and Home reads as centered/intentional. */}
+        <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:13 }}>
           {SOMMELIER_PROMPTS.map(p=>(
-            <button key={p} onClick={()=>onAsk(p)} style={{ flexShrink:0, padding:'8px 15px', borderRadius:99, border:'none', background:T.ink, color:'#f4f1ea', fontFamily:'var(--sans)', fontSize:12.5, fontWeight:500, cursor:'pointer', whiteSpace:'nowrap' }}>{p}</button>
+            <button key={p} onClick={()=>onAsk(p)} style={{ padding:'8px 14px', borderRadius:99, border:'none', background:T.ink, color:'#f4f1ea', fontFamily:'var(--sans)', fontSize:12.5, fontWeight:500, cursor:'pointer' }}>{p}</button>
           ))}
         </div>
 
