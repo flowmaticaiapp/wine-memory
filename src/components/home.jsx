@@ -5,7 +5,7 @@ import { Icon } from './ui.jsx';
 import { BottlePhoto } from './bottle.jsx';
 import { V_STATUS, V_NAV } from '../lib/constants.js';
 
-const SOMMELIER_PROMPTS = ['Best white for grilled vegetables','Should I buy this bottle?','Wine for tonight’s pasta','Explain Beaujolais'];
+const SOMMELIER_PROMPTS = ['What should I drink tonight?','Should I buy this bottle?','Explain Beaujolais'];
 const DEST = [
   ['Shopping','Should I buy this bottle?','shopping'],
   ['At Home','What should I open tonight?','home'],
@@ -39,7 +39,7 @@ function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, 
             and Home reads as centered/intentional. */}
         <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:13 }}>
           {SOMMELIER_PROMPTS.map(p=>(
-            <button key={p} onClick={()=>onAsk(p)} style={{ padding:'8px 14px', borderRadius:99, border:'none', background:T.ink, color:'#f4f1ea', fontFamily:'var(--sans)', fontSize:12.5, fontWeight:500, cursor:'pointer' }}>{p}</button>
+            <button key={p} onClick={()=>onAsk(p)} style={{ padding:'7px 13px', borderRadius:99, border:`1px solid ${T.line2}`, background:'transparent', color:T.ink2, fontFamily:'var(--sans)', fontSize:12.5, fontWeight:500, cursor:'pointer' }}>{p}</button>
           ))}
         </div>
 
