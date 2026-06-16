@@ -15,7 +15,7 @@ const { useState: dUS, useRef: dUR } = React;
 // Normalize any picked photo (incl. iOS HEIC, which Safari can decode) to a
 // downscaled JPEG data URL — keeps the upload small/fast and in a format Claude
 // vision accepts.
-function fileToJpegDataUrl(file, maxDim = 1600, quality = 0.82){
+function fileToJpegDataUrl(file, maxDim = 2000, quality = 0.88){
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();

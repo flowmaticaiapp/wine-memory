@@ -76,13 +76,19 @@ Deno.serve(async (req) => {
         `producer + name exactly as printed (name), the grape/varietal if shown (grape), the vintage year if shown (vintage), ` +
         `and the by-the-bottle price as a plain number if shown (price). Leave "dishes" empty. ` +
         `If the photo is blurry or unreadable, return empty arrays rather than guessing.`
-      : `This is a photo of a restaurant FOOD MENU. Read the orderable dish names and return them in "dishes" ` +
-        `(just the dish name — no description, section header, or price). Leave "wines" empty. ` +
-        `If the photo is blurry or unreadable, return empty arrays rather than guessing.`;
+      : `This is a photo of a restaurant FOOD MENU. Read EVERY orderable dish and return them in "dishes". ` +
+        `Scan the WHOLE image methodically — every section and every column, top to bottom, left to right. ` +
+        `Be exhaustive: do not stop early, sample, or summarize — a typical menu has 15-40 items and you must list them all. ` +
+        `Each entry is just the dish name (no price, and drop long descriptions, but keep the full dish name). ` +
+        `Skip only section titles like "Antipasti"/"Mains". If part of the photo is genuinely unreadable, include what you can read rather than returning nothing.`;
 
+    // Menus need thorough scanning; "low" effort makes the model bail early on
+    // busy/stylized layouts. Use medium for recall (retry drops effort if the
+    // model rejects the param entirely).
+    const EFFORT = isWine ? "low" : "medium";
     const callClaude = (withEffort: boolean): Promise<Response> => {
       const output_config: Record<string, unknown> = { format: { type: "json_schema", schema: SCHEMA } };
-      if (withEffort) output_config.effort = "low";
+      if (withEffort) output_config.effort = EFFORT;
       return fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -92,7 +98,7 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 2048,
+          max_tokens: 4096,
           output_config,
           messages: [{
             role: "user",
