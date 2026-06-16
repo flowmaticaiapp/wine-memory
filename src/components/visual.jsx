@@ -236,25 +236,34 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
             </div>
           </>}
 
-          {/* notes */}
+          {/* notes — single note per wine: clear add / saved / edit states */}
           <div style={{ height:26 }}/>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <Lbl inline>Notes</Lbl>
-            {!editing && <button onClick={()=>setEditing(true)} style={{ background:'none', border:'none', color:T.ink2, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--sans)' }}>{wine.note?'Edit':'Add'}</button>}
-          </div>
           {editing ? (
             <div>
-              <textarea autoFocus value={draft} onChange={e=>setDraft(e.target.value)} rows={3} placeholder="Who you were with, the meal, the moment…"
+              <Lbl>Your note</Lbl>
+              <textarea autoFocus value={draft} onChange={e=>setDraft(e.target.value)} rows={3} placeholder="What you tasted, where you were, who you were with…"
                 style={{ width:'100%', boxSizing:'border-box', border:`1.5px solid ${T.ink}`, borderRadius:12, padding:12, fontFamily:'var(--sans)', fontSize:14.5, lineHeight:1.5, color:T.ink, resize:'none', outline:'none' }}/>
               <div style={{ display:'flex', gap:8, marginTop:8 }}>
-                <button onClick={()=>{ onUpdate(wine.id,{note:draft}); setEditing(false); }} style={{ padding:'9px 16px', borderRadius:10, border:'none', background:T.ink, color:'#fff', fontFamily:'var(--sans)', fontSize:13.5, fontWeight:650, cursor:'pointer' }}>Save</button>
+                <button onClick={()=>{ onUpdate(wine.id,{note:draft.trim()}); setEditing(false); }} style={{ padding:'9px 16px', borderRadius:10, border:'none', background:T.ink, color:'#fff', fontFamily:'var(--sans)', fontSize:13.5, fontWeight:650, cursor:'pointer' }}>Save note</button>
                 <button onClick={()=>{ setDraft(wine.note||''); setEditing(false); }} style={{ padding:'9px 16px', borderRadius:10, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:600, cursor:'pointer' }}>Cancel</button>
               </div>
             </div>
           ) : wine.note ? (
-            <div onClick={()=>setEditing(true)} style={{ fontSize:15.5, color:T.ink, lineHeight:1.55, cursor:'text' }}>{wine.note}</div>
+            <div>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                <Lbl inline>Your note</Lbl>
+                <button onClick={()=>setEditing(true)} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'none', border:'none', color:T.ink2, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'var(--sans)' }}><Icon name="edit" size={15} color={T.ink2}/> Edit</button>
+              </div>
+              <div onClick={()=>setEditing(true)} style={{ fontSize:15.5, color:T.ink, lineHeight:1.6, cursor:'text' }}>{wine.note}</div>
+            </div>
           ) : (
-            <button onClick={()=>setEditing(true)} style={{ width:'100%', textAlign:'left', padding:14, borderRadius:12, border:`1.5px dashed ${T.line2}`, background:T.canvas, color:T.ink3, fontFamily:'var(--sans)', fontSize:14, cursor:'pointer' }}>“Served with ribeye on Father’s Day,” “Luke liked this one”…</button>
+            <button onClick={()=>setEditing(true)} style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:12, padding:16, borderRadius:14, border:`1.5px dashed ${T.line2}`, background:T.canvas, cursor:'pointer' }}>
+              <Icon name="edit" size={20} color={T.ink2}/>
+              <div>
+                <div style={{ fontSize:14.5, fontWeight:680, color:T.ink }}>Add a tasting note</div>
+                <div style={{ fontSize:12.5, color:T.ink3, marginTop:2 }}>What you tasted, where you were, who you were with.</div>
+              </div>
+            </button>
           )}
 
           {/* provenance */}
