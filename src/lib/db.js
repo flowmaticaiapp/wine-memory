@@ -86,3 +86,24 @@ export async function insertPairing(userId, p){
   if (error) throw error;
   return rowToPairing(data);
 }
+
+// ── dining experiences ──────────────────────────────────────────────
+function rowToDining(r){
+  return { id:r.id, dish:r.dish, place:r.place, dishes:r.dishes ?? [], wines:r.wines ?? [],
+    recommendation:r.recommendation ?? null, pick_name:r.pick_name, pick_price:r.pick_price,
+    date:(r.created_at||'').slice(0,10) };
+}
+
+export async function fetchDining(){
+  const { data, error } = await supabase.from('dining_experiences').select('*').order('created_at', { ascending:false });
+  if (error) throw error;
+  return data.map(rowToDining);
+}
+
+export async function insertDining(userId, e){
+  const row = { dish:e.dish ?? '', place:e.place ?? '', dishes:e.dishes ?? [], wines:e.wines ?? [],
+    recommendation:e.recommendation ?? null, pick_name:e.pick_name ?? null, pick_price:e.pick_price ?? null };
+  const { data, error } = await supabase.from('dining_experiences').insert(row).select('*').single();
+  if (error) throw error;
+  return rowToDining(data);
+}

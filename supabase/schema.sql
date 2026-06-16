@@ -44,9 +44,29 @@ create table if not exists public.pairings (
 );
 create index if not exists pairings_user_idx on public.pairings (user_id, created_at desc);
 
+-- ── dining_experiences (saved Dining Out recommendations) ───────────
+create table if not exists public.dining_experiences (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null default auth.uid() references auth.users on delete cascade,
+  dish           text,
+  place          text,
+  dishes         jsonb default '[]'::jsonb,
+  wines          jsonb default '[]'::jsonb,
+  recommendation jsonb,
+  pick_name      text,
+  pick_price     numeric,
+  created_at     timestamptz default now()
+);
+create index if not exists dining_user_idx on public.dining_experiences (user_id, created_at desc);
+
 -- ── Row Level Security — each user sees only their own rows ──────────
-alter table public.wines    enable row level security;
-alter table public.pairings enable row level security;
+alter table public.wines               enable row level security;
+alter table public.pairings            enable row level security;
+alter table public.dining_experiences  enable row level security;
+
+drop policy if exists "own rows" on public.dining_experiences;
+create policy "own rows" on public.dining_experiences for all
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 drop policy if exists "own rows" on public.wines;
 create policy "own rows" on public.wines for all
@@ -61,8 +81,9 @@ create policy "own rows" on public.pairings for all
 -- `authenticated` role reach the tables. `anon` is intentionally NOT granted —
 -- the app requires sign-in, so unauthenticated requests get nothing.
 grant usage on schema public to authenticated;
-grant select, insert, update, delete on public.wines    to authenticated;
-grant select, insert, update, delete on public.pairings to authenticated;
+grant select, insert, update, delete on public.wines               to authenticated;
+grant select, insert, update, delete on public.pairings            to authenticated;
+grant select, insert, update, delete on public.dining_experiences  to authenticated;
 
 -- ── Storage: bottle photos ──────────────────────────────────────────
 -- Public-read bucket (label photos aren't sensitive); writes scoped to the

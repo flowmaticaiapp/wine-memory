@@ -32,7 +32,7 @@ function VNav({ tab, setTab }){
       <span style={{ fontFamily:'var(--sans)', fontSize:10, fontWeight:on?680:540, color:on?T.ink:T.ink4 }}>{label}</span>
     </button> ); };
   return (
-    <div style={{ position:'absolute', left:0, right:0, bottom:0, zIndex:40, paddingBottom:'calc(8px + env(safe-area-inset-bottom))', background:'rgba(255,255,255,0.92)', backdropFilter:'blur(16px)', WebkitBackdropFilter:'blur(16px)', borderTop:`1px solid ${T.line}`, display:'flex', paddingLeft:6, paddingRight:6 }}>
+    <div style={{ position:'absolute', left:0, right:0, bottom:0, zIndex:70, paddingBottom:'calc(8px + env(safe-area-inset-bottom))', background:'rgba(255,255,255,0.92)', backdropFilter:'blur(16px)', WebkitBackdropFilter:'blur(16px)', borderTop:`1px solid ${T.line}`, display:'flex', paddingLeft:6, paddingRight:6 }}>
       {item('home','home','Home')}
       {item('collection','collection','Cellar')}
       <div style={{ width:62, flexShrink:0 }}/>
@@ -42,7 +42,7 @@ function VNav({ tab, setTab }){
   );
 }
 function VFAB({ onClick }){
-  return <button onClick={onClick} aria-label="Add wine" style={{ position:'absolute', bottom:'calc(18px + env(safe-area-inset-bottom))', left:'50%', transform:'translateX(-50%)', zIndex:50, width:56, height:56, borderRadius:99, background:T.ink, border:'3px solid #fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 6px 18px rgba(17,17,19,0.34)' }}><Icon name="plus" size={26} color="#fff" stroke={2.4}/></button>;
+  return <button onClick={onClick} aria-label="Add wine" style={{ position:'absolute', bottom:'calc(18px + env(safe-area-inset-bottom))', left:'50%', transform:'translateX(-50%)', zIndex:72, width:56, height:56, borderRadius:99, background:T.ink, border:'3px solid #fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 6px 18px rgba(17,17,19,0.34)' }}><Icon name="plus" size={26} color="#fff" stroke={2.4}/></button>;
 }
 function VToast({ toast }){
   if(!toast) return null;
@@ -112,6 +112,7 @@ function VApp({ session }){
     (async()=>{ try{
       const [ws,ps] = await Promise.all([db.fetchWines(), db.fetchPairings()]);
       if(on){ setWines(ws); setPairings(ps); }
+      db.fetchDining().then(ds=>{ if(on) setDining(ds); }).catch(e=>console.error("dining load skipped", e));
     }catch(e){ console.error('Load failed', e); if(on){ setWines([]); flash('Could not load your cellar'); } } })();
     return ()=>{ on=false; };
   },[]);
@@ -127,8 +128,9 @@ function VApp({ session }){
   const explore=(r)=>{ setExploreRegion(r); setOverlay('explore'); };
   const savePairing=async(p)=>{ try{ const sp=await db.insertPairing(userId,p); setPairings(ps=>[sp,...ps]); flash('Saved to My Palate'); }catch(e){ console.error(e); } };
   const addPhoto=async(id,dataUrl)=>{ try{ const url=await db.setWinePhoto(userId,id,dataUrl); setWines(ws=>ws.map(w=>w.id===id?{...w,photo:url}:w)); flash('Photo added'); }catch(e){ console.error('photo upload failed', e); flash('Could not upload photo'); } };
-  const saveDining=async({experience,pairing})=>{ setDining(ds=>[newDiningExperience(experience),...ds]); if(pairing){ try{ const sp=await db.insertPairing(userId,pairing); setPairings(ps=>[sp,...ps]); }catch(e){ console.error(e); } } };
+  const saveDining=async({experience,pairing})=>{ try{ const saved=await db.insertDining(userId,experience); setDining(ds=>[saved,...ds]); }catch(e){ console.error("save dining failed", e); flash("Could not save dining"); } if(pairing){ try{ const sp=await db.insertPairing(userId,pairing); setPairings(ps=>[sp,...ps]); }catch(e){ console.error(e); } } };
 
+  const navTo=(t)=>{ setOverlay(null); setTab(t); };
   const detail = (overlay&&overlay.detail&&wines)? wines.find(w=>w.id===overlay.detail):null;
   const fullPanel = ['searchadd','import','search','diningout','snap'].includes(overlay);
   const hasSamples = wines? wines.some(w=>w.sample) : false;
@@ -143,14 +145,14 @@ function VApp({ session }){
       {tab==='learn' && <ExploreScreen region={exploreRegion} wines={wines} onPick={setExploreRegion} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask}/>}
       {tab==='account' && <AccountScreen email={session.user.email} provider={session.user.app_metadata?.provider}/>}
 
-      {!detail && !fullPanel && (<><VNav tab={tab} setTab={setTab}/><VFAB onClick={()=>setOverlay('addhub')}/></>)}
+      {!fullPanel && (<><VNav tab={tab} setTab={navTo}/><VFAB onClick={()=>setOverlay('addhub')}/></>)}
 
       {overlay==='addhub' && <AddHub onClose={()=>setOverlay(null)} onSearch={()=>setOverlay('searchadd')} onImport={()=>setOverlay('import')} onSnap={()=>setOverlay('snap')}/>}
       {overlay==='snap' && <SnapLabel onClose={()=>setOverlay(null)} onSave={addWine} onSearchInstead={()=>setOverlay('searchadd')} verdictVariant={t.verdictStyle}/>}
       {overlay==='searchadd' && <SearchAdd onClose={()=>setOverlay(null)} onSave={addWine} verdictVariant={t.verdictStyle}/>}
       {overlay==='import' && <OrderImport onClose={()=>setOverlay(null)} onAddMany={addMany} onViewToTry={viewToTry}/>}
       {overlay==='search' && <PairingSearch wines={wines} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
-      {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining}/>}
+      {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining} recent={dining}/>}
       {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} onAddPhoto={addPhoto} verdictVariant={t.verdictStyle}/>}
       </>}
 
