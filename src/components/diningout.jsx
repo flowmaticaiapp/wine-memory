@@ -58,7 +58,7 @@ function PhotoTile({ label, sub, filled, busy, onClick }){
   );
 }
 
-function DiningOut({ onClose, onSave }){
+function DiningOut({ onClose, onSave, recent }){
   const [step, setStep] = dUS('input');     // input | reading | result
   const [place, setPlace] = dUS('');
   const [dish, setDish] = dUS('');
@@ -140,10 +140,15 @@ function DiningOut({ onClose, onSave }){
     if (!rec || !onSave) return;
     const pick = rec.listMatches && rec.listMatches[0];
     onSave({
-      experience:{ experience_type:'Restaurant', place_name:place.trim(), dish_name:rec.dish,
-        wine_name: pick?pick.name:(rec.primary.grape), wine_price: pick?pick.price:null,
-        match_confidence: (rec.listMatches&&rec.listMatches.length)?'medium':null,
-        pairing_note:`${rec.dish} → ${rec.primary.grape}` },
+      experience:{
+        dish: rec.dish,
+        place: place.trim(),
+        dishes: dishes,
+        wines: (list||[]).map(w=>({ name:w.name, grape:w.grape||'', vintage:w.vintage||'', price:(w.price ?? null) })),
+        recommendation: { grape:rec.primary.grape, why:rec.primary.why, deeperTitle:rec.primary.deeperTitle, deeper:rec.primary.deeper, others:rec.others||[] },
+        pick_name: pick ? pick.name : null,
+        pick_price: pick ? (pick.price ?? null) : null,
+      },
       pairing:{ dish:rec.dish, style:(rec.primary.deeperTitle||rec.primary.grape), why:rec.primary.why, related_saved_wine_id:null, type:rec.primary.grape.match(/blanc|chard|gris|riesling|chenin|sauv/i)?'White':'Red' },
     });
     setSaved(true);
@@ -263,6 +268,22 @@ function DiningOut({ onClose, onSave }){
             <DLbl>Type the wines from their list <span style={{ textTransform:'none', letterSpacing:0, color:T.ink4 }}>· one per line</span></DLbl>
             <textarea autoFocus value={listText} onChange={e=>setListText(e.target.value)} rows={4} placeholder="Type or paste a few wines from their list, one per line…"
               style={{ width:'100%', boxSizing:'border-box', border:`1px solid ${T.line2}`, borderRadius:12, padding:'12px', fontFamily:'var(--mono)', fontSize:12.5, lineHeight:1.5, color:T.ink, resize:'none', outline:'none', background:T.canvas }}/>
+          </div>
+        )}
+
+        {/* recent saved dining recommendations (persisted) */}
+        {recent && recent.length>0 && (
+          <div style={{ marginTop:28 }}>
+            <DLbl>Recent dining recommendations</DLbl>
+            <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
+              {recent.slice(0,5).map(d=>(
+                <div key={d.id} style={{ padding:'12px 13px', border:`1px solid ${T.line}`, borderRadius:13, background:'#fff' }}>
+                  <div style={{ fontSize:14, fontWeight:660, color:T.ink, letterSpacing:-0.1 }}>{d.dish}</div>
+                  <div style={{ fontSize:13, color:T.ink2, marginTop:2 }}>{d.pick_name || (d.recommendation && d.recommendation.grape) || ''}</div>
+                  {(d.place || d.date) && <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.ink3, marginTop:5, letterSpacing:0.3 }}>{[d.place, d.date].filter(Boolean).join(' · ')}</div>}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

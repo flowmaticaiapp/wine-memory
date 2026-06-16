@@ -31,7 +31,7 @@ function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, 
 
         {/* sommelier */}
         <button onClick={()=>onAsk('')} style={{ width:'100%', display:'flex', alignItems:'center', gap:12, marginTop:26, background:'transparent', border:`1px solid ${T.line2}`, borderRadius:14, padding:'0 16px', height:54, cursor:'pointer', textAlign:'left' }}>
-          <Icon name="sparkle" size={18} color={T.ink}/>
+          <Icon name="sparkle" size={18} color="#9b2f3a"/>
           <span style={{ flex:1, fontFamily:'var(--sans)', fontSize:15.5, color:T.ink3 }}>Ask your sommelier…</span>
           <Icon name="arrow" size={19} color={T.ink}/>
         </button>
@@ -48,7 +48,7 @@ function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, 
           {DEST.map(([label,desc,key])=>(
             <button key={key} onClick={route[key]} style={{ width:'100%', display:'flex', alignItems:'center', gap:14, padding:'18px 18px', background:T.surface, border:'none', borderRadius:16, cursor:'pointer', textAlign:'left', boxShadow:'0 6px 18px rgba(22,20,15,0.09), 0 1px 2px rgba(22,20,15,0.05)' }}>
               <div style={{ flex:1 }}>
-                <div style={{ fontFamily:'var(--sans)', fontSize:10.5, fontWeight:600, letterSpacing:'.24em', textTransform:'uppercase', color:T.ink3 }}>{label}</div>
+                <div style={{ fontFamily:'var(--sans)', fontSize:10.5, fontWeight:600, letterSpacing:'.24em', textTransform:'uppercase', color:'#9b2f3a' }}>{label}</div>
                 <div style={{ fontFamily:'var(--serif)', fontSize:25, color:T.ink, marginTop:3, lineHeight:1.05 }}>{desc}</div>
               </div>
               <Icon name="arrow" size={19} color={T.ink}/>

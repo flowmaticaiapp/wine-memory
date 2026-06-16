@@ -112,6 +112,7 @@ function VApp({ session }){
     (async()=>{ try{
       const [ws,ps] = await Promise.all([db.fetchWines(), db.fetchPairings()]);
       if(on){ setWines(ws); setPairings(ps); }
+      db.fetchDining().then(ds=>{ if(on) setDining(ds); }).catch(e=>console.error("dining load skipped", e));
     }catch(e){ console.error('Load failed', e); if(on){ setWines([]); flash('Could not load your cellar'); } } })();
     return ()=>{ on=false; };
   },[]);
@@ -127,7 +128,7 @@ function VApp({ session }){
   const explore=(r)=>{ setExploreRegion(r); setOverlay('explore'); };
   const savePairing=async(p)=>{ try{ const sp=await db.insertPairing(userId,p); setPairings(ps=>[sp,...ps]); flash('Saved to My Palate'); }catch(e){ console.error(e); } };
   const addPhoto=async(id,dataUrl)=>{ try{ const url=await db.setWinePhoto(userId,id,dataUrl); setWines(ws=>ws.map(w=>w.id===id?{...w,photo:url}:w)); flash('Photo added'); }catch(e){ console.error('photo upload failed', e); flash('Could not upload photo'); } };
-  const saveDining=async({experience,pairing})=>{ setDining(ds=>[newDiningExperience(experience),...ds]); if(pairing){ try{ const sp=await db.insertPairing(userId,pairing); setPairings(ps=>[sp,...ps]); }catch(e){ console.error(e); } } };
+  const saveDining=async({experience,pairing})=>{ try{ const saved=await db.insertDining(userId,experience); setDining(ds=>[saved,...ds]); }catch(e){ console.error("save dining failed", e); flash("Could not save dining"); } if(pairing){ try{ const sp=await db.insertPairing(userId,pairing); setPairings(ps=>[sp,...ps]); }catch(e){ console.error(e); } } };
 
   const detail = (overlay&&overlay.detail&&wines)? wines.find(w=>w.id===overlay.detail):null;
   const fullPanel = ['searchadd','import','search','diningout','snap'].includes(overlay);
@@ -150,7 +151,7 @@ function VApp({ session }){
       {overlay==='searchadd' && <SearchAdd onClose={()=>setOverlay(null)} onSave={addWine} verdictVariant={t.verdictStyle}/>}
       {overlay==='import' && <OrderImport onClose={()=>setOverlay(null)} onAddMany={addMany} onViewToTry={viewToTry}/>}
       {overlay==='search' && <PairingSearch wines={wines} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
-      {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining}/>}
+      {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining} recent={dining}/>}
       {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} onAddPhoto={addPhoto} verdictVariant={t.verdictStyle}/>}
       </>}
 
