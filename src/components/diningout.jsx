@@ -119,12 +119,26 @@ function DiningOut({ onClose, onSave }){
           .map(w=>({ name:(w.name||'').trim(), grape:w.grape||'', vintage:w.vintage||'', price:(w.price!=null?w.price:null) }))
           .filter(w=>w.name);
         if (!wines.length) throw new Error('no wines read');
-        setList(wines); setListPhoto(true); setShowPaste(false);
+        // Additive: snapping another wine-list page accumulates (dedup by name).
+        setList(prev=>{
+          const seen = new Set(prev.map(w=>(w.name||'').toLowerCase()));
+          const merged = [...prev];
+          wines.forEach(w=>{ const k=w.name.toLowerCase(); if(!seen.has(k)){ seen.add(k); merged.push(w); } });
+          return merged;
+        });
+        setListPhoto(true); setShowPaste(false);
       } else {
         const names = (data?.dishes || []).map(d=>(d.name||'').trim()).filter(Boolean);
         if (!names.length) throw new Error('no dishes read');
-        setDishes(names); setMenuPhoto(true);
-        if (!dish.trim()) setDish(names[0]);
+        // Additive: snapping another menu page accumulates dishes (dedup, case-insensitive).
+        setDishes(prev=>{
+          const seen = new Set(prev.map(s=>s.toLowerCase()));
+          const merged = [...prev];
+          names.forEach(n=>{ if(!seen.has(n.toLowerCase())){ seen.add(n.toLowerCase()); merged.push(n); } });
+          return merged;
+        });
+        setMenuPhoto(true);
+        if (!dish.trim() && names[0]) setDish(names[0]);
       }
     } catch(err){
       console.error('menu-vision failed', err);
@@ -239,7 +253,7 @@ function DiningOut({ onClose, onSave }){
         {photoErr
           ? <div style={{ fontSize:11.5, color:T.no, marginTop:8, lineHeight:1.4 }}>Couldn’t read that {photoErr==='winelist'?'wine list':'menu'} photo. Try a clearer, well-lit shot — or type the details below.</div>
           : (menuPhoto || listPhoto)
-            ? <div style={{ fontSize:11.5, color:T.buy, marginTop:8, lineHeight:1.4 }}>{[menuPhoto?`${dishes.length} dish${dishes.length===1?'':'es'} read`:'', listPhoto?`${list.length} wine${list.length===1?'':'s'} read`:''].filter(Boolean).join(' · ')} — tweak anything below.</div>
+            ? <div style={{ fontSize:11.5, color:T.buy, marginTop:8, lineHeight:1.4 }}>{[menuPhoto?`${dishes.length} dish${dishes.length===1?'':'es'} read`:'', listPhoto?`${list.length} wine${list.length===1?'':'s'} read`:''].filter(Boolean).join(' · ')} — tap a card again to add another page.</div>
             : <div style={{ fontSize:11.5, color:T.ink4, marginTop:8, lineHeight:1.4 }}>Take a photo or pick from your library — we’ll read the dishes and wines for you.</div>}
 
         {/* dish */}
