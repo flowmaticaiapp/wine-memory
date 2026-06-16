@@ -254,13 +254,13 @@ function DiningOut({ onClose, onSave }){
         {!list.length && !showPaste && (
           <div style={{ marginTop:20, textAlign:'center' }}>
             <button onClick={()=>setShowPaste(true)} style={{ display:'inline-flex', alignItems:'center', gap:7, background:'none', border:'none', cursor:'pointer', color:T.ink3, fontFamily:'var(--sans)', fontSize:12.5, fontWeight:560, padding:'4px 8px' }}>
-              <Icon name="paste" size={15} color={T.ink3}/> No wine list photo? Paste instead
+              <Icon name="edit" size={15} color={T.ink3}/> No wine list photo? Type the wines instead
             </button>
           </div>
         )}
         {showPaste && (
           <div style={{ marginTop:18 }}>
-            <DLbl>Paste their wine list <span style={{ textTransform:'none', letterSpacing:0, color:T.ink4 }}>· one per line</span></DLbl>
+            <DLbl>Type the wines from their list <span style={{ textTransform:'none', letterSpacing:0, color:T.ink4 }}>· one per line</span></DLbl>
             <textarea autoFocus value={listText} onChange={e=>setListText(e.target.value)} rows={4} placeholder="Type or paste a few wines from their list, one per line…"
               style={{ width:'100%', boxSizing:'border-box', border:`1px solid ${T.line2}`, borderRadius:12, padding:'12px', fontFamily:'var(--mono)', fontSize:12.5, lineHeight:1.5, color:T.ink, resize:'none', outline:'none', background:T.canvas }}/>
           </div>
