@@ -275,8 +275,8 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
           </div>
         </div>
 
-        {more.length>0 && <div style={{ marginTop:6, paddingBottom:40 }}><Shelf title="More like this" sub={fam.label} accent={fam.hue} wines={more} onOpen={onOpen}/></div>}
-        {more.length===0 && <div style={{ height:40 }}/>}
+        {more.length>0 && <div style={{ marginTop:6, paddingBottom:`calc(${V_NAV+30}px + env(safe-area-inset-bottom))` }}><Shelf title="More like this" sub={fam.label} accent={fam.hue} wines={more} onOpen={onOpen}/></div>}
+        {more.length===0 && <div style={{ height:`calc(${V_NAV+30}px + env(safe-area-inset-bottom))` }}/>}
       </div>
     </div>
   );
