@@ -174,9 +174,7 @@ function VApp({ session }){
   // Screens already reserve V_STATUS(50) of top space; on taller notches we top up
   // the difference so content clears the status bar without double-counting.
   if (isMobile) return (
-    // position:fixed pins the whole app to the visual viewport so no gesture can
-    // drag the frame sideways — it behaves like a native, fixed app shell.
-    <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100dvh', background:'#fff', overflow:'hidden', boxSizing:'border-box', paddingTop:'max(0px, calc(env(safe-area-inset-top) - 50px))' }}>
+    <div style={{ position:'relative', width:'100%', height:'100dvh', background:'#fff', overflow:'hidden', boxSizing:'border-box', paddingTop:'max(0px, calc(env(safe-area-inset-top) - 50px))' }}>
       {screen}
       {tweaks}
     </div>
