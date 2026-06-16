@@ -5,8 +5,9 @@ import { T, VERDICTS, FLAVOR_FAMILIES, PAIRING_GROUPS } from '../lib/data.js';
 import { Icon, VerdictBadge, VerdictPicker, WhereTag, typeColor } from './ui.jsx';
 import { BottlePhoto, FlavorBars } from './bottle.jsx';
 import { V_STATUS, V_NAV, DEVICE_W, CONTENT_W, famOf, clamp } from '../lib/constants.js';
+import { fileToJpegDataUrl } from '../lib/image.js';
 
-const { useState: vUS, useMemo: vUM, useEffect: vUE } = React;
+const { useState: vUS, useMemo: vUM, useEffect: vUE, useRef: vUR } = React;
 
 function SampleTag(){
   return <span style={{ position:'absolute', top:8, right:8, fontFamily:'var(--mono)', fontSize:9, fontWeight:600, letterSpacing:0.4, color:'#fff', background:'rgba(17,17,19,0.62)', padding:'3px 7px', borderRadius:6, textTransform:'uppercase' }}>Sample</span>;
@@ -149,10 +150,21 @@ function EmptyFilter({ filter }){
 // ════════════════════════════════════════════════════════
 //  DETAIL
 // ════════════════════════════════════════════════════════
-function VisualDetail({ wine, all, onBack, onOpen, onUpdate, verdictVariant='expressive' }){
+function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdictVariant='expressive' }){
   const [editing, setEditing] = vUS(false);
   const [draft, setDraft] = vUS(wine.note||'');
+  const [photoBusy, setPhotoBusy] = vUS(false);
+  const photoInputRef = vUR(null);
   vUE(()=>{ setDraft(wine.note||''); setEditing(false); },[wine.id]);
+  const onPhotoFile = async (e)=>{
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file || !onAddPhoto) return;
+    setPhotoBusy(true);
+    try { const dataUrl = await fileToJpegDataUrl(file); await onAddPhoto(wine.id, dataUrl); }
+    catch(err){ console.error('add photo failed', err); }
+    finally { setPhotoBusy(false); }
+  };
   const fam = famOf(wine.family);
   const accent = `hsl(${fam.hue} 55% 46%)`;
   const tc = typeColor(wine.type);
@@ -171,7 +183,10 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, verdictVariant='exp
             <VerdictBadge id={wine.verdict} variant="expressive"/>
             {wine.sample && <span style={{ fontFamily:'var(--mono)', fontSize:9.5, fontWeight:600, color:'#fff', background:'rgba(17,17,19,0.6)', padding:'3px 8px', borderRadius:6, letterSpacing:0.4, textTransform:'uppercase' }}>Sample</span>}
           </div>
-          {!wine.photo && <button onClick={()=>onUpdate(wine.id,{})} style={{ position:'absolute', bottom:14, right:16, display:'flex', alignItems:'center', gap:7, background:'#fff', border:`1px solid ${T.line2}`, borderRadius:99, padding:'8px 14px', cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.08)', fontFamily:'var(--sans)', fontSize:13, fontWeight:620, color:T.ink }}><Icon name="camera" size={16} color={T.ink}/> Add photo</button>}
+          {!wine.photo && <>
+            <input ref={photoInputRef} type="file" accept="image/*" onChange={onPhotoFile} style={{ display:'none' }}/>
+            <button onClick={()=>!photoBusy && photoInputRef.current && photoInputRef.current.click()} disabled={photoBusy} style={{ position:'absolute', bottom:14, right:16, display:'flex', alignItems:'center', gap:7, background:'#fff', border:`1px solid ${T.line2}`, borderRadius:99, padding:'8px 14px', cursor:photoBusy?'default':'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.08)', fontFamily:'var(--sans)', fontSize:13, fontWeight:620, color:T.ink }}><Icon name="camera" size={16} color={T.ink}/> {photoBusy?'Uploading…':'Add photo'}</button>
+          </>}
         </div>
 
         <div style={{ padding:'20px 20px 0' }}>

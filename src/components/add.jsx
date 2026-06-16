@@ -26,7 +26,7 @@ function money2(n){ return n==null?'—':'$'+(Number(n)%1===0?n:Number(n).toFixe
 // ════════════════════════════════════════════════════════
 //  ADD HUB — bottom sheet from the FAB
 // ════════════════════════════════════════════════════════
-function AddHub({ onClose, onSearch, onImport, onSnap, onScan }) {
+function AddHub({ onClose, onSearch, onImport, onSnap }) {
   return (
     <div onClick={onClose} style={{ position:'absolute', inset:0, zIndex:90, background:'rgba(17,17,19,0.34)', display:'flex', alignItems:'flex-end' }}>
       <div onClick={e=>e.stopPropagation()} style={{ width:'100%', background:'#fff', borderRadius:'24px 24px 0 0', padding:'10px 18px calc(26px + env(safe-area-inset-bottom))', boxShadow:'0 -10px 44px rgba(0,0,0,0.2)' }}>
@@ -35,7 +35,6 @@ function AddHub({ onClose, onSearch, onImport, onSnap, onScan }) {
         <div style={{ fontSize:13.5, color:T.ink3, marginBottom:18 }}>Capture one you loved, or import a whole order.</div>
 
         <HubOption icon="camera" title="Snap a label" sub="Photograph the bottle — we’ll identify it" primary onClick={onSnap}/>
-        <HubOption icon="grid" title="Scan multiple bottles" sub="Photograph a haul — add them all at once" onClick={onScan}/>
         <HubOption icon="search" title="Search a bottle" sub="Find it, set your verdict, done in seconds" onClick={onSearch}/>
         <HubOption icon="paste" title="Paste an order" sub="Drop a Total Wine receipt — we’ll add every bottle" onClick={onImport}/>
       </div>

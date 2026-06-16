@@ -9,30 +9,9 @@ import { Icon, typeColor } from './ui.jsx';
 import { Panel, Spinner } from './add.jsx';
 import { heuristicPairing } from './pairing.jsx';
 import { supabase } from '../lib/supabase.js';
+import { fileToJpegDataUrl } from '../lib/image.js';
 
 const { useState: dUS, useRef: dUR } = React;
-
-// Normalize any picked photo (incl. iOS HEIC, which Safari can decode) to a
-// downscaled JPEG data URL — keeps the upload small/fast and in a format Claude
-// vision accepts.
-function fileToJpegDataUrl(file, maxDim = 2000, quality = 0.88){
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      let w = img.naturalWidth, h = img.naturalHeight;
-      const scale = Math.min(1, maxDim / Math.max(w, h));
-      w = Math.max(1, Math.round(w * scale)); h = Math.max(1, Math.round(h * scale));
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read image')); };
-    img.src = url;
-  });
-}
 
 // match parsed restaurant-list wines to a recommended style (by grape/type)
 function matchListToStyle(list, matchGrapes, avoid){
