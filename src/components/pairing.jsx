@@ -207,7 +207,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
         </div>
       </div>
 
-      <div style={{ flex:1, overflow:'auto', padding:'16px 16px 40px' }}>
+      <div style={{ flex:1, overflowX:'hidden', overflowY:'auto', padding:'16px 16px 40px' }}>
         {phase==='idle' && <>
           <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.4, marginBottom:12, textTransform:'uppercase' }}>Ask your sommelier</div>
           <div style={{ display:'flex', flexDirection:'column', gap:9 }}>

@@ -4,7 +4,7 @@ import React from 'react';
 import { T, VERDICTS, FLAVOR_FAMILIES, PAIRING_GROUPS } from '../lib/data.js';
 import { Icon, VerdictBadge, VerdictPicker, WhereTag, typeColor } from './ui.jsx';
 import { BottlePhoto, FlavorBars } from './bottle.jsx';
-import { V_STATUS, V_NAV, DEVICE_W, CONTENT_W, famOf, clamp } from '../lib/constants.js';
+import { V_STATUS, V_NAV, CONTENT_W, famOf, clamp } from '../lib/constants.js';
 import { fileToJpegDataUrl } from '../lib/image.js';
 
 const { useState: vUS, useMemo: vUM, useEffect: vUE, useRef: vUR } = React;
@@ -85,7 +85,7 @@ function Collection({ wines, cols, filter, setFilter, onOpen, onSearch, hasSampl
   const chips = [['all','All',T.ink],['totry','To Try',VERDICTS.totry.color],['buy','Buy Again',VERDICTS.buy.color],['maybe','Maybe',VERDICTS.maybe.color],['no','No',VERDICTS.no.color]];
 
   return (
-    <div style={{ height:'100%', overflow:'auto', background:'#fff' }}>
+    <div style={{ height:'100%', overflowX:'hidden', overflowY:'auto', background:'#fff' }}>
       <div style={{ position:'sticky', top:0, zIndex:30, background:'rgba(255,255,255,0.92)', backdropFilter:'blur(14px)', WebkitBackdropFilter:'blur(14px)', borderBottom:`1px solid ${T.line}` }}>
         <div style={{ paddingTop:V_STATUS }}/>
         <div style={{ padding:'6px 16px 0' }}>
@@ -173,12 +173,12 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
 
   return (
     <div style={{ position:'absolute', inset:0, zIndex:60, background:'#fff', display:'flex', flexDirection:'column' }}>
-      <div style={{ flex:1, overflow:'auto' }}>
+      <div style={{ flex:1, overflowX:'hidden', overflowY:'auto' }}>
         {/* hero */}
         <div style={{ position:'relative' }}>
           <input ref={photoInputRef} type="file" accept="image/*" onChange={onPhotoFile} style={{ display:'none' }}/>
           {wine.photo ? (<>
-            <BottlePhoto wine={wine} w={DEVICE_W} h={300} rounded={0} flat/>
+            <BottlePhoto wine={wine} w={'100%'} h={300} rounded={0} flat/>
             {/* Change-photo: always available, high-contrast on any image. */}
             <button onClick={triggerPhoto} disabled={photoBusy} style={{ position:'absolute', bottom:14, right:16, display:'flex', alignItems:'center', gap:7, background:'rgba(17,17,19,0.62)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', border:'none', borderRadius:99, padding:'9px 15px', cursor:photoBusy?'default':'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.18)', fontFamily:'var(--sans)', fontSize:13, fontWeight:640, color:'#fff' }}><Icon name="camera" size={16} color="#fff"/> {photoBusy?'Uploading…':'Change photo'}</button>
           </>) : (

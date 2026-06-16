@@ -36,7 +36,7 @@ function ExploreScreen({ region, wines, onBack, onOpenWine, onPick }){
   const accent = typeColor(r.grapes[0].match(/blanc|chardonnay|gris|chenin|sauvignon|melon/i)?'White':'Red');
 
   return (
-    <div style={{ height:'100%', overflow:'auto', background:'#fff' }}>
+    <div style={{ height:'100%', overflowX:'hidden', overflowY:'auto', background:'#fff' }}>
       <div style={{ paddingTop:V_STATUS }}/>
       <div style={{ padding:'8px 20px 0' }}>
         <h1 style={{ margin:0, fontSize:27, fontWeight:780, letterSpacing:-0.9 }}>Explore</h1>

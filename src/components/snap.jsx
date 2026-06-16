@@ -104,7 +104,7 @@ function SnapLabel({ onClose, onSave, onSearchInstead, verdictVariant='expressiv
     : { bg:T.maybeBg, fg:T.maybe, icon:'edit', label: f.error ? 'COULDN’T READ — ADD DETAILS' : 'COULDN’T IDENTIFY — ADD DETAILS' };
   return (
     <Panel onClose={onClose} title="Confirm & save" onBack={()=>setStep('capture')} backLabel="Retake">
-      <div style={{ flex:1, overflow:'auto', padding:'18px 20px 30px' }}>
+      <div style={{ flex:1, overflowX:'hidden', overflowY:'auto', padding:'18px 20px 30px' }}>
         {/* photo + status */}
         <div style={{ display:'flex', gap:14, alignItems:'center', marginBottom:16 }}>
           {photo && <img src={photo} alt="" style={{ width:64, height:80, borderRadius:11, objectFit:'cover', border:`1px solid ${T.line2}`, flexShrink:0 }}/>}

@@ -165,7 +165,7 @@ function DiningOut({ onClose, onSave }){
     const tc = typeColor(rec.primary.grape.match(/blanc|chard|gris|riesling|chenin|sauv|vermentino/i)?'White':'Red');
     return (
       <Panel onClose={onClose} title="What to order" onBack={()=>{ setStep('input'); setSaved(false); }} backLabel="Edit">
-        <div style={{ flex:1, overflow:'auto', padding:'16px 18px 30px' }}>
+        <div style={{ flex:1, overflowX:'hidden', overflowY:'auto', padding:'16px 18px 30px' }}>
           {place && <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.3, textTransform:'uppercase', marginBottom:4 }}>{place}</div>}
           <div style={{ fontFamily:'var(--mono)', fontSize:11.5, color:T.ink3, letterSpacing:0.3, textTransform:'uppercase' }}>For {rec.dish}</div>
           <div style={{ fontSize:26, fontWeight:780, letterSpacing:-0.7, marginTop:7 }}>{rec.primary.grape}</div>
@@ -218,7 +218,7 @@ function DiningOut({ onClose, onSave }){
   // ── INPUT ──
   return (
     <Panel onClose={onClose} title="Dining Out">
-      <div style={{ flex:1, overflow:'auto', padding:'16px 18px 30px' }}>
+      <div style={{ flex:1, overflowX:'hidden', overflowY:'auto', padding:'16px 18px 30px' }}>
         <div style={{ fontSize:14, color:T.ink2, lineHeight:1.5, marginBottom:18 }}>Sat down at a restaurant? Snap the menu and wine list, or just type your dish — we’ll tell you what to order.</div>
 
         {/* photos */}

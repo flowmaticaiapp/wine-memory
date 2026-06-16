@@ -101,7 +101,7 @@ function SearchAdd({ onClose, onSave, verdictVariant }) {
         </div>
       </div>
 
-      <div style={{ flex:1, overflow:'auto', WebkitOverflowScrolling:'touch', padding:'4px 0 8px' }}>
+      <div style={{ flex:1, overflowX:'hidden', overflowY:'auto', WebkitOverflowScrolling:'touch', padding:'4px 0 8px' }}>
         {phase==='idle' && <SearchIdle/>}
         {phase==='loading' && <SearchSkeleton/>}
         {phase==='error' && <SearchError onRetry={()=>setQ(q+' ')}/>}
@@ -192,7 +192,7 @@ function ConfirmCard({ match, onBack, onClose, onSave, verdictVariant }) {
 
   return (
     <Panel onClose={onClose} title="Add to collection" onBack={onBack} backLabel="Search">
-      <div style={{ flex:1, overflow:'auto', WebkitOverflowScrolling:'touch', padding:'18px 18px 40px' }}>
+      <div style={{ flex:1, overflowX:'hidden', overflowY:'auto', WebkitOverflowScrolling:'touch', padding:'18px 18px 40px' }}>
         {/* wine identity card */}
         <div style={{ display:'flex', gap:15, padding:'16px', background:T.canvas, borderRadius:16, border:`1px solid ${T.line}` }}>
           <BottlePhoto wine={match} w={64} h={80} rounded={11}/>
@@ -267,7 +267,7 @@ function OrderImport({ onClose, onAddMany, onViewToTry }) {
 
   if (step === 'done') return (
     <Panel onClose={onClose} title="Added to To Try">
-      <div style={{ flex:1, overflow:'auto', padding:'28px 22px 0' }}>
+      <div style={{ flex:1, overflowX:'hidden', overflowY:'auto', padding:'28px 22px 0' }}>
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center' }}>
           <div style={{ width:60, height:60, borderRadius:99, background:T.buyBg, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:16 }}><Icon name="check" size={30} color={T.buy} stroke={2.6}/></div>
           <div style={{ fontSize:20, fontWeight:760, letterSpacing:-0.4 }}>{savedWines.length} {savedWines.length===1?'wine':'wines'} added to To Try</div>
@@ -305,7 +305,7 @@ function OrderImport({ onClose, onAddMany, onViewToTry }) {
     };
     return (
       <Panel onClose={onClose} title="Review order" onBack={()=>setStep('paste')} backLabel="Paste">
-        <div style={{ flex:1, overflow:'auto', WebkitOverflowScrolling:'touch', padding:'14px 16px 30px' }}>
+        <div style={{ flex:1, overflowX:'hidden', overflowY:'auto', WebkitOverflowScrolling:'touch', padding:'14px 16px 30px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 14px', background:T.totryBg, borderRadius:12, marginBottom:14 }}>
             <Icon name="sparkle" size={17} color={T.totry}/>
             <span style={{ fontSize:13.5, color:T.totry, fontWeight:560, lineHeight:1.4 }}>We found <b>{items.length} {items.length===1?'wine':'wines'}</b>. Each will be saved to <b>To Try</b> — rate it after you open the bottle.</span>
@@ -343,7 +343,7 @@ function OrderImport({ onClose, onAddMany, onViewToTry }) {
   // step paste
   return (
     <Panel onClose={onClose} title="Paste an order">
-      <div style={{ flex:1, overflow:'auto', padding:'16px 16px 30px' }}>
+      <div style={{ flex:1, overflowX:'hidden', overflowY:'auto', padding:'16px 16px 30px' }}>
         <div style={{ fontSize:14, color:T.ink2, lineHeight:1.5, marginBottom:14 }}>Paste the confirmation email or receipt from Total Wine, a winery, or any retailer. We’ll pull out every bottle.</div>
         <textarea value={text} onChange={e=>{ setText(e.target.value); setError(''); }} placeholder="Paste your order text here…" rows={9}
           style={{ width:'100%', boxSizing:'border-box', border:`1.5px solid ${error?T.no:T.line2}`, borderRadius:14, padding:'14px', fontFamily:'var(--mono)', fontSize:12.5, lineHeight:1.55, color:T.ink, resize:'none', outline:'none', background:T.canvas }}/>

@@ -38,7 +38,7 @@ function PalateScreen({ wines, pairings, onOpenWine, onAsk }){
   const focusRegion = (key)=>{ setSelKey(key); setTimeout(()=> atlasRef.current && atlasRef.current.scrollIntoView({ behavior:'smooth', block:'center' }), 40); };
 
   return (
-    <div style={{ height:'100%', overflow:'auto', background:'#fff' }}>
+    <div style={{ height:'100%', overflowX:'hidden', overflowY:'auto', background:'#fff' }}>
       <div style={{ paddingTop:V_STATUS }}/>
       <div style={{ padding:'8px 18px', paddingBottom:V_NAV+96 }}>
 

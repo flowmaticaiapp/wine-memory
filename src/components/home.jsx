@@ -17,7 +17,7 @@ function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, 
   const recent = wines.slice().sort((a,b)=> new Date(b.added)-new Date(a.added)).slice(0,6);
   const route = { shopping:onShopping, home:onHome, dining:onDiningOut, learn:onExplore };
   return (
-    <div style={{ height:'100%', overflow:'auto', background:T.bg }}>
+    <div style={{ height:'100%', overflowX:'hidden', overflowY:'auto', background:T.bg }}>
       <div style={{ paddingTop:V_STATUS }}/>
       <div style={{ padding:'10px 28px 0' }}>
         {/* wordmark */}
