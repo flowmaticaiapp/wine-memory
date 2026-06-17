@@ -28,10 +28,14 @@ const SCHEMA = {
     grape: { type: "string", description: "Primary grape(s) if known/printed" },
     region: { type: "string", description: "Wine region, e.g. 'Barolo, Piedmont'" },
     country: { type: "string" },
+    blurb: { type: "string", description: "When found, ONE vivid sommelier-style sentence, 20-30 words: what this wine is and why someone would enjoy it. Warm, educational, editorial — never salesy. Empty string if not identified." },
+    style: { type: "string", description: "When found, a 2-4 word style descriptor, e.g. 'Crisp coastal white', 'Bold structured red'. Empty string if not identified." },
+    tastesLike: { type: "array", items: { type: "string" }, description: "When found, EXACTLY 3 short flavor/aroma descriptors. Empty array if not identified." },
+    pairsWith: { type: "array", items: { type: "string" }, description: "When found, EXACTLY 3 concise food pairings. Empty array if not identified." },
     lat: { type: "number", description: "Approx latitude of the region (optional)" },
     lng: { type: "number", description: "Approx longitude of the region (optional)" },
   },
-  required: ["found", "confidence", "producer", "name", "vintage", "type", "grape", "region", "country"],
+  required: ["found", "confidence", "producer", "name", "vintage", "type", "grape", "region", "country", "blurb", "style", "tastesLike", "pairsWith"],
 };
 
 function json(body: unknown, status = 200): Response {
@@ -65,7 +69,8 @@ Deno.serve(async (req) => {
       `Return your best structured identification: producer, wine name (no producer/vintage), vintage (year or "NV"), type, grape(s), region, country. ` +
       `Set "found"=true and "confidence" honestly — high only if you're confident of the exact bottling, medium for a strong read, low for a guess. ` +
       `If you genuinely cannot identify a real wine from the label, set found=false, confidence="low", and fill only what's clearly legible (e.g. type or producer). ` +
-      `Do not invent a producer or bottling that isn't visible on the label. Provide approximate region lat/lng when you know them.`;
+      `Do not invent a producer or bottling that isn't visible on the label. Provide approximate region lat/lng when you know them.\n` +
+      `When you DO identify the wine, also write, in the editorial voice of a warm sommelier: a "blurb" (ONE sentence, 20-30 words, what it is and why someone would enjoy it — concrete and educational, never marketing-speak), a 2-4 word "style", exactly 3 "tastesLike" flavor descriptors, and exactly 3 "pairsWith" food pairings. If found=false, leave blurb and style empty strings and tastesLike/pairsWith empty arrays.`;
 
     const callClaude = (withEffort: boolean): Promise<Response> => {
       const output_config: Record<string, unknown> = { format: { type: "json_schema", schema: SCHEMA } };

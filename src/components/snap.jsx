@@ -4,7 +4,7 @@
 // Ported from app/snap.jsx.
 import React from 'react';
 import { T } from '../lib/data.js';
-import { Icon, VerdictPicker, typeColor } from './ui.jsx';
+import { Icon, VerdictPicker, typeColor, WineBrief } from './ui.jsx';
 import { Panel, Spinner } from './add.jsx';
 import { supabase } from '../lib/supabase.js';
 import { invokeAI } from '../lib/ai.js';
@@ -52,7 +52,8 @@ function SnapLabel({ onClose, onSave, onSearchInstead, verdictVariant='expressiv
       const r = await identifyLabel(image);
       setF({ found:!!r.found, confidence:r.confidence||'low', producer:r.producer||'', name:r.name||'',
         vintage:r.vintage||'NV', type:WINE_TYPES.includes(r.type)?r.type:(r.type||'Red'), grape:r.grape||'',
-        region:r.region||'', country:r.country||'', lat:r.lat, lng:r.lng });
+        region:r.region||'', country:r.country||'', lat:r.lat, lng:r.lng,
+        blurb:r.blurb||'', style:r.style||'', tastesLike:r.tastesLike||[], pairsWith:r.pairsWith||[] });
       setStep('confirm');
     } catch(err){
       console.error('label-identify failed', err);
@@ -117,6 +118,9 @@ function SnapLabel({ onClose, onSave, onSearchInstead, verdictVariant='expressiv
           <button onClick={onSearchInstead} style={{ width:'100%', marginBottom:16, padding:'12px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
             <Icon name="search" size={16} color={T.ink}/> Search by name instead</button>
         )}
+
+        {/* sommelier brief — what it is & why you'd enjoy it */}
+        <div style={{ marginBottom:16 }}><WineBrief wine={f}/></div>
 
         <Field label="Producer" value={f.producer} onChange={v=>setF({...f,producer:v})} placeholder="Producer"/>
         <Field label="Wine name" value={f.name} onChange={v=>setF({...f,name:v})} placeholder="Wine name"/>

@@ -151,6 +151,43 @@ function Chip({ label, on, onClick, color = T.ink, mini=false }) {
   );
 }
 
+// ── WineBrief — sommelier description + style/taste/pairing chips ──
+// Shown beneath an identified wine (search ConfirmCard, Snap confirm) so the
+// user immediately understands what the wine is and why they'd enjoy it.
+// Renders nothing unless the AI returned a blurb (e.g. manual / unidentified).
+function BriefRow({ label, items }) {
+  const list = Array.isArray(items) ? items.filter(Boolean) : (items ? [items] : []);
+  if (!list.length) return null;
+  return (
+    <div style={{ display:'flex', alignItems:'flex-start', gap:9, marginTop:9 }}>
+      <span style={{ flexShrink:0, width:50, paddingTop:5, fontFamily:'var(--mono)', fontSize:9, letterSpacing:'.1em', textTransform:'uppercase', color:T.ink4 }}>{label}</span>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+        {list.map((t,i)=>(
+          <span key={i} style={{ padding:'4px 11px', borderRadius:99, background:T.canvas, border:`1px solid ${T.line2}`,
+            fontFamily:'var(--sans)', fontSize:11.5, fontWeight:500, color:T.ink2, whiteSpace:'nowrap' }}>{t}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+function WineBrief({ wine }) {
+  const blurb = wine && wine.blurb;
+  if (!blurb) return null;
+  return (
+    <div style={{ marginTop:14, paddingTop:14, borderTop:`1px solid ${T.line}` }}>
+      <div style={{ display:'flex', gap:9, alignItems:'flex-start' }}>
+        <Icon name="sparkle" size={15} color={typeColor('Red')} style={{ flexShrink:0, marginTop:4 }}/>
+        <p style={{ margin:0, fontFamily:'var(--serif)', fontSize:15.5, lineHeight:1.5, color:T.ink, letterSpacing:0.1 }}>{blurb}</p>
+      </div>
+      <div style={{ marginTop:6 }}>
+        <BriefRow label="Style" items={wine.style}/>
+        <BriefRow label="Tastes" items={wine.tastesLike}/>
+        <BriefRow label="Pairs" items={wine.pairsWith}/>
+      </div>
+    </div>
+  );
+}
+
 function WhereTag({ where, color = T.ink3 }) {
   const map = { home:['home','Home'], restaurant:['glass','Restaurant'], winery:['pin','Winery'] };
   const [ic,label] = map[where] || map.home;
@@ -161,4 +198,4 @@ function WhereTag({ where, color = T.ink3 }) {
   );
 }
 
-export { Icon, VGlyph, LabelTile, typeColor, VerdictBadge, VerdictPicker, Chip, WhereTag };
+export { Icon, VGlyph, LabelTile, typeColor, VerdictBadge, VerdictPicker, Chip, WhereTag, WineBrief };

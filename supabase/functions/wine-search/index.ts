@@ -57,11 +57,15 @@ const SCHEMA = {
             required: ["body", "acidity", "tannin", "fruit", "oak"],
           },
           pairings: { type: "array", items: { type: "string" }, description: "2-3 food pairings" },
+          blurb: { type: "string", description: "ONE vivid sommelier-style sentence, 20-30 words: what this wine is and why someone would enjoy it. Warm, educational, editorial — name the grape/region character and a vivid flavor note. Never salesy. E.g. 'Bright Albariño from coastal Galicia — citrus, peach, and saline minerality, made for seafood and warm afternoons.'" },
+          style: { type: "string", description: "A 2-4 word style descriptor, e.g. 'Crisp coastal white', 'Bold structured red', 'Silky alpine red'." },
+          tastesLike: { type: "array", items: { type: "string" }, description: "EXACTLY 3 short flavor/aroma descriptors, e.g. ['Citrus', 'White peach', 'Saline minerality']." },
+          pairsWith: { type: "array", items: { type: "string" }, description: "EXACTLY 3 concise food pairings, e.g. ['Grilled seafood', 'Summer salads', 'Goat cheese']." },
           lat: { type: "number", description: "Approx latitude of the region (optional)" },
           lng: { type: "number", description: "Approx longitude of the region (optional)" },
           confidence: { type: "string", enum: ["high", "medium", "low"] },
         },
-        required: ["producer", "name", "vintage", "type", "grape", "region", "country", "family", "flavor", "pairings", "confidence"],
+        required: ["producer", "name", "vintage", "type", "grape", "region", "country", "family", "flavor", "pairings", "blurb", "style", "tastesLike", "pairsWith", "confidence"],
       },
     },
   },
@@ -93,7 +97,8 @@ Deno.serve(async (req) => {
       `Identify the most likely REAL wines that match — handle partial names, misspellings, and "producer + grape" or "producer + region" queries.\n` +
       `Return up to 3 candidates, best match first. For a clear single match, one candidate is fine; add close alternatives only when genuinely plausible.\n` +
       `Ground every field in real-world wine knowledge — do not invent a producer or bottling that doesn't exist. If you can't identify any real wine, return an empty matches array.\n` +
-      `Set confidence honestly (high = you're sure of the exact bottling; low = a guess). Flavor axes are integers 0-5. Provide approximate region lat/lng when you know them.`;
+      `Set confidence honestly (high = you're sure of the exact bottling; low = a guess). Flavor axes are integers 0-5. Provide approximate region lat/lng when you know them.\n` +
+      `For each match also write, in the editorial voice of a warm sommelier: a "blurb" (ONE sentence, 20-30 words, what it is and why someone would enjoy it — concrete and educational, never marketing-speak), a 2-4 word "style", exactly 3 "tastesLike" flavor descriptors, and exactly 3 "pairsWith" food pairings.`;
 
     // Low effort keeps this snappy (wine ID is recall, not deep reasoning), but
     // some models (e.g. claude-haiku-4-5) reject the `effort` param outright. So
@@ -113,7 +118,7 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 1024,
+          max_tokens: 1536,
           output_config,
           messages: [{ role: "user", content: prompt }],
         }),

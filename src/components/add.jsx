@@ -3,7 +3,7 @@
 // Ported from app/add.jsx.
 import React from 'react';
 import { T, QUICK_TAGS, SAMPLE_ORDER, parseOrder } from '../lib/data.js';
-import { Icon, LabelTile, VerdictPicker, Chip, typeColor } from './ui.jsx';
+import { Icon, LabelTile, VerdictPicker, Chip, typeColor, WineBrief } from './ui.jsx';
 import { BottlePhoto } from './bottle.jsx';
 import { IOSKeyboard } from './IOSFrame.jsx';
 import { supabase } from '../lib/supabase.js';
@@ -15,6 +15,7 @@ function normalizeMatch(m){
     producer:m.producer, name:m.name, vintage:m.vintage, type:m.type, grape:m.grape||'',
     region:m.region||'', country:m.country||'', family:m.family, flavor:m.flavor,
     pairings:m.pairings||[], loc:(m.lng!=null&&m.lat!=null)?[m.lng,m.lat]:undefined,
+    blurb:m.blurb||'', style:m.style||'', tastesLike:m.tastesLike||[], pairsWith:m.pairsWith||[],
   };
 }
 
@@ -203,6 +204,9 @@ function ConfirmCard({ match, onBack, onClose, onSave, verdictVariant }) {
             {!match.manual && <div style={{ marginTop:7, display:'inline-flex', alignItems:'center', gap:5, fontFamily:'var(--mono)', fontSize:10, color:T.maybe, letterSpacing:0.3 }}><Icon name="sparkle" size={12} color={T.maybe}/> AI-FILLED</div>}
           </div>
         </div>
+
+        {/* sommelier brief — what it is & why you'd enjoy it */}
+        <WineBrief wine={match}/>
 
         {/* verdict — required */}
         <div style={{ height:22 }}/>
