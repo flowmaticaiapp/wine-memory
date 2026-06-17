@@ -34,11 +34,20 @@ function AddHub({ onClose, onSearch, onImport, onSnap }) {
       <div onClick={e=>e.stopPropagation()} style={{ width:'100%', background:'#fff', borderRadius:'24px 24px 0 0', padding:'10px 18px calc(26px + env(safe-area-inset-bottom))', boxShadow:'0 -10px 44px rgba(0,0,0,0.2)' }}>
         <div style={{ width:38, height:5, borderRadius:99, background:T.line2, margin:'0 auto 18px' }}/>
         <div style={{ fontSize:20, fontWeight:740, letterSpacing:-0.4, marginBottom:4 }}>Remember a wine</div>
-        <div style={{ fontSize:13.5, color:T.ink3, marginBottom:18 }}>Capture one you loved, or import a whole order.</div>
+        <div style={{ fontSize:13.5, color:T.ink3, marginBottom:18 }}>Snap the label or search by name — we’ll fill in the details.</div>
 
         <HubOption icon="camera" title="Snap a label" sub="Photograph the bottle — we’ll identify it" primary onClick={onSnap}/>
         <HubOption icon="search" title="Search a bottle" sub="Find it, set your verdict, done in seconds" onClick={onSearch}/>
-        <HubOption icon="paste" title="Paste an order" sub="Drop a Total Wine receipt — we’ll add every bottle" onClick={onImport}/>
+
+        {/* secondary: bulk import is a separate, post-purchase task — kept quiet so it
+            doesn't compete with the single-bottle "remember / evaluate" intent. */}
+        <div style={{ marginTop:6, paddingTop:14, borderTop:`1px solid ${T.line}` }}>
+          <button onClick={onImport} style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'6px' }}>
+            <Icon name="paste" size={16} color={T.ink3}/>
+            <span style={{ fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, color:T.ink2 }}>Import an order</span>
+            <span style={{ fontFamily:'var(--sans)', fontSize:12.5, color:T.ink4 }}>· from a receipt</span>
+          </button>
+        </div>
       </div>
     </div>
   );
