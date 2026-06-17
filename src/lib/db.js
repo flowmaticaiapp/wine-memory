@@ -3,7 +3,9 @@
 // so queries never need an explicit user filter.
 import { supabase } from './supabase.js';
 
-const WINE_COLS = 'id,producer,name,vintage,type,grape,region,country,loc,verdict,tags,note,where,source,price,photo,family,flavor,pairings,sample,added';
+// tastesLike/pairsWith use PostgREST column aliases so fetched rows come back
+// camelCase (matching the client wine object); blurb/style map 1:1.
+const WINE_COLS = 'id,producer,name,vintage,type,grape,region,country,loc,verdict,tags,note,where,source,price,photo,family,flavor,pairings,blurb,style,tastesLike:tastes_like,pairsWith:pairs_with,sample,added';
 
 // ── photos ──────────────────────────────────────────────────────────
 // Snap/Scan hand us a base64 data URL; upload it and return a public URL.
@@ -26,6 +28,7 @@ function wineToRow(w, photo){
     loc:w.loc ?? null, verdict:w.verdict ?? 'totry', tags:w.tags ?? [], note:w.note ?? '',
     where:w.where ?? 'home', source:w.source ?? null, price:w.price ?? null, photo:photo ?? null,
     family:w.family ?? null, flavor:w.flavor ?? null, pairings:w.pairings ?? [], sample:!!w.sample,
+    blurb:w.blurb ?? null, style:w.style ?? null, tastes_like:w.tastesLike ?? [], pairs_with:w.pairsWith ?? [],
     added:w.added ?? null,
   };
 }

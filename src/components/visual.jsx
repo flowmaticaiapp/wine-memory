@@ -2,7 +2,7 @@
 // Ported from app/visual.jsx.
 import React from 'react';
 import { T, VERDICTS, FLAVOR_FAMILIES, PAIRING_GROUPS } from '../lib/data.js';
-import { Icon, VerdictBadge, VerdictPicker, WhereTag, typeColor } from './ui.jsx';
+import { Icon, VerdictBadge, VerdictPicker, WhereTag, typeColor, WineBrief } from './ui.jsx';
 import { BottlePhoto, FlavorBars } from './bottle.jsx';
 import { V_STATUS, V_NAV, CONTENT_W, famOf, clamp } from '../lib/constants.js';
 import { fileToJpegDataUrl } from '../lib/image.js';
@@ -204,6 +204,9 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
           <div style={{ fontSize:15, color:T.ink2, marginTop:6, fontWeight:540 }}>{wine.vintage} · {wine.type}{wine.grape?' · '+wine.grape:''}</div>
           <div style={{ fontSize:13.5, color:T.ink3, marginTop:7, display:'flex', alignItems:'center', gap:5 }}><Icon name="pin" size={14} color={T.ink3}/> {wine.region}{wine.country?', '+wine.country:''}</div>
 
+          {/* sommelier brief — what it is & why you'd enjoy it (saved at identification) */}
+          <WineBrief wine={wine}/>
+
           {wine.flavor && <div style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:15, padding:'8px 14px', borderRadius:99, background:`hsl(${fam.hue} 60% 96%)`, border:`1px solid hsl(${fam.hue} 50% 84%)` }}>
             <span style={{ width:9, height:9, borderRadius:3, background:accent }}/>
             <span style={{ fontSize:13.5, fontWeight:680, color:`hsl(${fam.hue} 45% 32%)` }}>{fam.label}</span>
@@ -224,8 +227,8 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
             <FlavorBars flavor={wine.flavor} color={accent}/>
           </>}
 
-          {/* pairings */}
-          {(wine.pairings||[]).length>0 && <>
+          {/* pairings — legacy section; the brief's "Pairs" chips cover this for newer wines */}
+          {(wine.pairings||[]).length>0 && !wine.blurb && <>
             <div style={{ height:26 }}/>
             <Lbl>Pairings</Lbl>
             <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>

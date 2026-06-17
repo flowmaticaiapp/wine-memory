@@ -25,6 +25,10 @@ create table if not exists public.wines (
   family     text,
   flavor     jsonb,                          -- {body,acidity,tannin,fruit,oak}
   pairings   text[] default '{}',
+  blurb      text,                           -- sommelier description (saved at identification)
+  style      text,                           -- 2-4 word style descriptor
+  tastes_like text[] default '{}',           -- 3 flavor descriptors
+  pairs_with text[] default '{}',            -- 3 food pairings
   sample     boolean default false,
   added      date default current_date,
   created_at timestamptz default now()

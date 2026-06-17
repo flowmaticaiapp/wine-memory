@@ -66,6 +66,7 @@ function SnapLabel({ onClose, onSave, onSearchInstead, verdictVariant='expressiv
     const hasLoc = f && f.lng!=null && f.lat!=null;
     onSave({ id:'w'+Date.now(), photo, producer:f.producer||'Unknown producer', name:f.name||'Unknown wine',
       vintage:f.vintage||'NV', type:f.type, grape:f.grape, region:f.region, country:f.country, ...(hasLoc?{loc:[f.lng,f.lat]}:{}),
+      blurb:f.blurb||'', style:f.style||'', tastesLike:f.tastesLike||[], pairsWith:f.pairsWith||[],
       verdict: verdict||'totry', tags:[], note, where:'home', source:'Snap a label', price:null, added:snToday(), sample:false });
   };
   const lowConfidence = f && (!f.found || f.confidence==='low' || f.error);
