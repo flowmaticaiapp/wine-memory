@@ -41,9 +41,9 @@ function Onboarding({ onSnap, onSkip }){
     <div style={wrap}>
       <div style={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'center' }}>
         <h1 style={{ margin:0, fontFamily:'var(--serif)', fontSize:34, fontWeight:500, lineHeight:1.08, color:T.ink, letterSpacing:0.2 }}>
-          Become the person who <em style={{ fontStyle:'italic' }}>knows wine.</em></h1>
+          Love wine beyond your <em style={{ fontStyle:'italic' }}>usual bottle.</em></h1>
         <p style={{ margin:'14px 0 0', fontFamily:'var(--sans)', fontSize:14.5, lineHeight:1.5, color:T.ink2 }}>
-          One bottle at a time.</p>
+          Save what you enjoy. Start connecting the dots.</p>
         <div style={{ marginTop:30 }}>
           {PREVIEW.map(([lab, chip, accent], i)=>(
             <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'11px 0', borderBottom: i<2?`1px solid ${T.line}`:'none' }}>
