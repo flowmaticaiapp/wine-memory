@@ -9,6 +9,7 @@ import { Icon, typeColor } from './ui.jsx';
 import { Panel, Spinner } from './add.jsx';
 import { heuristicPairing } from './pairing.jsx';
 import { supabase } from '../lib/supabase.js';
+import { invokeAI } from '../lib/ai.js';
 import { fileToJpegDataUrl } from '../lib/image.js';
 
 const { useState: dUS, useRef: dUR } = React;
@@ -29,8 +30,7 @@ async function diningRecommend(dish, list){
   try {
     if (supabase){
       const listForAI = (list||[]).map(w=>({ name:w.name, grape:w.grape||'', price:w.price }));
-      const { data, error } = await supabase.functions.invoke('dining-recommend', { body:{ dish, list:listForAI } });
-      if (error) throw error;
+      const data = await invokeAI('dining-recommend', { dish, list:listForAI });
       if (data && data.primary){
         out = { dish:data.dish||dish, primary:data.primary, others:data.others||[], avoid:[],
           why:data.primary.why, listPickName:data.listPickName||null, listPickWhy:data.listPickWhy||'' };
@@ -91,8 +91,7 @@ function DiningOut({ onClose, onSave, recent }){
     try {
       if (!supabase) throw new Error('not configured');
       const image = await fileToJpegDataUrl(file);
-      const { data, error } = await supabase.functions.invoke('menu-vision', { body:{ image, kind } });
-      if (error) throw error;
+      const data = await invokeAI('menu-vision', { image, kind });
       if (isWine){
         const wines = (data?.wines || [])
           .map(w=>({ name:(w.name||'').trim(), grape:w.grape||'', vintage:w.vintage||'', price:(w.price!=null?w.price:null) }))

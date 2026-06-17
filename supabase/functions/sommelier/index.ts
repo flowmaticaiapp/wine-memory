@@ -6,6 +6,8 @@
 //   { kind:"answer", text }                            -> written answer
 // Personalized with the user's owned grapes/verdicts. Key stays server-side.
 
+import { gate } from "../_shared/auth.ts";
+
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const MODEL = Deno.env.get("SOMMELIER_MODEL") ?? "claude-sonnet-4-6";
 
@@ -60,6 +62,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   if (!ANTHROPIC_API_KEY) return json({ error: "Sommelier is not configured." }, 503);
+
+  const g = await gate(req, "sommelier");
+  if (!g.ok) return json({ error: g.error, blocked: true }, g.status);
 
   try {
     const body = await req.json().catch(() => ({}));

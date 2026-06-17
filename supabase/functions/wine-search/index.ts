@@ -4,6 +4,8 @@
 // Requires a signed-in user (Supabase verifies the JWT by default), so the
 // Anthropic key is never exposed and only authenticated callers can use it.
 
+import { gate } from "../_shared/auth.ts";
+
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 // Default to Sonnet 4.6: cheaper and faster than Opus, and plenty accurate for
 // wine identification (a recall task), while still supporting the `effort` param
@@ -77,6 +79,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   if (!ANTHROPIC_API_KEY) return json({ error: "Search is not configured." }, 503);
+
+  const g = await gate(req, "wine-search");
+  if (!g.ok) return json({ error: g.error, blocked: true }, g.status);
 
   try {
     const { query } = await req.json().catch(() => ({ query: "" }));
