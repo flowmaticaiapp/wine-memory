@@ -15,6 +15,7 @@ import { ExploreScreen } from './components/explore.jsx';
 import { AddHub, SearchAdd, OrderImport } from './components/add.jsx';
 import { SnapLabel } from './components/snap.jsx';
 import { Onboarding } from './components/Onboarding.jsx';
+import { FirstSuccess } from './components/FirstSuccess.jsx';
 import { PairingSearch } from './components/pairing.jsx';
 import { DiningOut } from './components/diningout.jsx';
 import { supabase, supabaseConfigured } from './lib/supabase.js';
@@ -114,8 +115,12 @@ function VApp({ session }){
   // Onboarding (Screens 2–3): show once for genuinely new users (no wines yet).
   const [onboarding,setOnboarding]=useState(()=>{ try{ return !localStorage.getItem('wm_onboarded_'+userId); }catch(_){ return false; } });
   const finishOnboarding=()=>{ try{ localStorage.setItem('wm_onboarded_'+userId,'1'); }catch(_){} setOnboarding(false); };
-  // An existing user (already has a cellar) isn't new — mark done silently, no flash.
-  useEffect(()=>{ if(onboarding && Array.isArray(wines) && wines.length>0){ try{ localStorage.setItem('wm_onboarded_'+userId,'1'); }catch(_){} setOnboarding(false); } },[wines]);
+  // An existing user (already has a cellar) isn't new — mark onboarding + first-wine
+  // celebration done silently so neither fires for them.
+  useEffect(()=>{ if(onboarding && Array.isArray(wines) && wines.length>0){ try{ localStorage.setItem('wm_onboarded_'+userId,'1'); localStorage.setItem('wm_first_'+userId,'1'); }catch(_){} setOnboarding(false); } },[wines]);
+
+  // First-wine celebration (one-time): the wine to celebrate, or null.
+  const [firstSuccess,setFirstSuccess]=useState(null);
 
   // load this user's cellar + pairings
   useEffect(()=>{ let on=true;
@@ -130,7 +135,15 @@ function VApp({ session }){
   const cols = t.columns==='3'?3:2;
   const loading = wines===null;
   const updateWine=(id,patch)=>{ if(patch.note) track('note_added'); setWines(ws=>ws.map(w=>w.id===id?{...w,...patch}:w)); db.updateWine(id,patch).catch(e=>console.error('Update failed', e)); };
-  const addWine=async(w)=>{ try{ const saved=await db.insertWine(userId, autoEnrich(w)); setWines(ws=>[saved,...ws]); setOverlay(null); flash('Added to your collection'); track('wine_added', { source:w.source }); }catch(e){ console.error(e); flash('Could not save'); } };
+  const addWine=async(w)=>{ try{
+    const wasEmpty = Array.isArray(wines) && wines.length===0;
+    const saved=await db.insertWine(userId, autoEnrich(w));
+    setWines(ws=>[saved,...ws]); setOverlay(null);
+    track('wine_added', { source:w.source });
+    let firstTime=false; try{ firstTime = wasEmpty && !localStorage.getItem('wm_first_'+userId); }catch(_){}
+    if(firstTime){ try{ localStorage.setItem('wm_first_'+userId,'1'); }catch(_){} setFirstSuccess(saved); }
+    else { flash('Added to your collection'); }
+  }catch(e){ console.error(e); flash('Could not save'); } };
   const addMany=async(arr)=>{ const saved=await db.insertWines(userId, arr.map(autoEnrich)); setWines(ws=>[...saved,...ws]); return saved; };
   const viewToTry=()=>{ setOverlay(null); setTab('collection'); setFilter('totry'); };
   const clearSamples=async()=>{ try{ await db.deleteSamples(); setWines(ws=>ws.filter(w=>!w.sample)); }catch(e){ console.error(e); } };
@@ -166,6 +179,7 @@ function VApp({ session }){
       {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} onAddPhoto={addPhoto} verdictVariant={t.verdictStyle}/>}
 
       {onboarding && wines.length===0 && <Onboarding onSnap={()=>{ finishOnboarding(); setOverlay('snap'); }} onSkip={finishOnboarding}/>}
+      {firstSuccess && <FirstSuccess wine={firstSuccess} onAsk={(q)=>{ setFirstSuccess(null); ask(q); }} onAddAnother={()=>{ setFirstSuccess(null); setOverlay('addhub'); }}/>}
       </>}
 
       <VToast toast={toast}/>

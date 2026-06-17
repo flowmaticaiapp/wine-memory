@@ -26,3 +26,4 @@ textarea::placeholder, input::placeholder{ color:#9a9aa1; }
 @keyframes wmShimmer{ 0%{ background-position:200% 0; } 100%{ background-position:-200% 0; } }
 @keyframes wmSlideUp{ from{ transform:translateY(14px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
 @keyframes wmToast{ from{ transform:translate(-50%,8px); opacity:0; } to{ transform:translate(-50%,0); opacity:1; } }
+@keyframes wmPop{ from{ transform:scale(.82); opacity:0; } to{ transform:scale(1); opacity:1; } }
