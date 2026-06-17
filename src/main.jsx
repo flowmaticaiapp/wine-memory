@@ -18,6 +18,7 @@ import { Onboarding } from './components/Onboarding.jsx';
 import { FirstSuccess } from './components/FirstSuccess.jsx';
 import { PairingSearch } from './components/pairing.jsx';
 import { DiningOut } from './components/diningout.jsx';
+import { LearnReader } from './components/TodaysPour.jsx';
 import { supabase, supabaseConfigured } from './lib/supabase.js';
 import * as db from './lib/db.js';
 import { track } from './lib/analytics.js';
@@ -155,14 +156,14 @@ function VApp({ session }){
 
   const navTo=(t)=>{ setOverlay(null); setTab(t); };
   const detail = (overlay&&overlay.detail&&wines)? wines.find(w=>w.id===overlay.detail):null;
-  const fullPanel = ['searchadd','import','search','diningout','snap'].includes(overlay);
+  const fullPanel = ['searchadd','import','search','diningout','snap','pour'].includes(overlay);
   const hasSamples = wines? wines.some(w=>w.sample) : false;
 
   const screen = (
     <div style={{ position:'relative', height:'100%', width:'100%', background:'#fff', overflow:'hidden' }}>
       {loading && <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}><svg width={30} height={30} viewBox="0 0 24 24" style={{ animation:'wmSpin .8s linear infinite' }}><circle cx="12" cy="12" r="9" fill="none" stroke={T.line2} strokeWidth="2.6"/><path d="M21 12a9 9 0 00-9-9" fill="none" stroke={T.ink} strokeWidth="2.6" strokeLinecap="round"/></svg></div>}
       {!loading && <>
-      {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onShopping={()=>setOverlay('addhub')} onHome={()=>ask('')} onDiningOut={()=>{ track('dining_opened'); setOverlay('diningout'); }} onExplore={()=>setTab('learn')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')}/>}
+      {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onShopping={()=>setOverlay('addhub')} onHome={()=>ask('')} onDiningOut={()=>{ track('dining_opened'); setOverlay('diningout'); }} onExplore={()=>setTab('learn')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')} onLearn={()=>setOverlay('pour')}/>}
       {tab==='collection' && <Collection wines={wines} cols={cols} filter={filter} setFilter={setFilter} hasSamples={hasSamples} onClearSamples={clearSamples} onOpen={(id)=>setOverlay({detail:id})} onSearch={()=>ask('')}/>}
       {tab==='palate' && <PalateScreen wines={wines} pairings={pairings} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask}/>}
       {tab==='learn' && <ExploreScreen region={exploreRegion} wines={wines} onPick={setExploreRegion} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask}/>}
@@ -176,6 +177,7 @@ function VApp({ session }){
       {overlay==='import' && <OrderImport onClose={()=>setOverlay(null)} onAddMany={addMany} onViewToTry={viewToTry}/>}
       {overlay==='search' && <PairingSearch wines={wines} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
       {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining} recent={dining}/>}
+      {overlay==='pour' && <LearnReader onClose={()=>setOverlay(null)} onExplore={()=>{ setOverlay(null); setTab('learn'); }}/>}
       {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} onAddPhoto={addPhoto} verdictVariant={t.verdictStyle}/>}
 
       {onboarding && wines.length===0 && <Onboarding onSnap={()=>{ finishOnboarding(); setOverlay('snap'); }} onSkip={finishOnboarding}/>}

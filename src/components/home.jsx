@@ -3,6 +3,7 @@
 import { T } from '../lib/data.js';
 import { Icon } from './ui.jsx';
 import { BottlePhoto } from './bottle.jsx';
+import { LearnCard } from './TodaysPour.jsx';
 import { V_STATUS, V_NAV } from '../lib/constants.js';
 
 const SOMMELIER_PROMPTS = ['What should I drink tonight?','Should I buy this bottle?','Explain Beaujolais'];
@@ -13,7 +14,7 @@ const DEST = [
   ['Explore','Regions, grapes & pairings.','learn'],
 ];
 
-function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, onOpenWine, onCollection }){
+function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, onOpenWine, onCollection, onLearn }){
   const recent = wines.slice().sort((a,b)=> new Date(b.added)-new Date(a.added)).slice(0,6);
   const route = { shopping:onShopping, home:onHome, dining:onDiningOut, learn:onExplore };
   return (
@@ -42,6 +43,9 @@ function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, 
             <button key={p} onClick={()=>onAsk(p)} style={{ padding:'7px 13px', borderRadius:99, border:`1px solid ${T.line2}`, background:'transparent', color:T.ink2, fontFamily:'var(--sans)', fontSize:12.5, fontWeight:500, cursor:'pointer' }}>{p}</button>
           ))}
         </div>
+
+        {/* Learn something in 30 seconds — the daily curiosity hook */}
+        {onLearn && <div style={{ marginTop:16 }}><LearnCard onOpen={onLearn}/></div>}
 
         {/* destinations */}
         <div style={{ marginTop:28, display:'flex', flexDirection:'column', gap:10 }}>

@@ -21,11 +21,12 @@ function Dots({ active }){
   );
 }
 
-// Screen 2 — the payoff, made tangible by a greyed preview of the taste portrait.
+// Screen 2 — sells the transformation (identity + self-discovery), not the
+// mechanism. The greyed preview reads as "this is who you're becoming."
 const PREVIEW = [
-  ['Grapes you love', 'Pinot Noir', false],
-  ['Regions you return to', 'Willamette', false],
-  ['What to try next', 'Barolo', true],
+  ['You loved', 'Pinot Noir', false],
+  ['You keep returning to', 'Willamette', false],
+  ['Try next', 'Barolo', true],
 ];
 
 function Onboarding({ onSnap, onSkip }){
@@ -40,9 +41,9 @@ function Onboarding({ onSnap, onSkip }){
     <div style={wrap}>
       <div style={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'center' }}>
         <h1 style={{ margin:0, fontFamily:'var(--serif)', fontSize:34, fontWeight:500, lineHeight:1.08, color:T.ink, letterSpacing:0.2 }}>
-          The more you save, the <em style={{ fontStyle:'italic' }}>smarter</em> it gets.</h1>
+          Become the person who <em style={{ fontStyle:'italic' }}>knows wine.</em></h1>
         <p style={{ margin:'14px 0 0', fontFamily:'var(--sans)', fontSize:14.5, lineHeight:1.5, color:T.ink2 }}>
-          Your favorite grapes, the regions you return to, and what to try next.</p>
+          One bottle at a time.</p>
         <div style={{ marginTop:30 }}>
           {PREVIEW.map(([lab, chip, accent], i)=>(
             <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'11px 0', borderBottom: i<2?`1px solid ${T.line}`:'none' }}>
