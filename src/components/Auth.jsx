@@ -62,9 +62,11 @@ export function AuthScreen(){
 
   return (
     <div style={wrap}><div style={card}>
-      <div style={{ fontFamily:'var(--serif)', fontSize:30, color:T.ink, letterSpacing:0.2 }}>Wine Memory</div>
-      <div style={{ fontSize:14.5, color:T.ink2, lineHeight:1.5, marginTop:8, marginBottom:26 }}>
-        Sign in to your cellar.
+      <div style={{ fontFamily:'var(--mono)', fontSize:10.5, letterSpacing:'.24em', textTransform:'uppercase', color:T.ink3 }}>Wine Memory</div>
+      <h1 style={{ margin:'10px 0 0', fontFamily:'var(--serif)', fontSize:30, fontWeight:500, lineHeight:1.1, color:T.ink, letterSpacing:0.2 }}>
+        Never forget a <em style={{ fontStyle:'italic' }}>good bottle.</em></h1>
+      <div style={{ fontSize:14, color:T.ink2, lineHeight:1.5, marginTop:10, marginBottom:26 }}>
+        Save the wines you love. Skip the ones you don't.
       </div>
 
       {/* Primary — Continue with Google */}
@@ -102,6 +104,12 @@ export function AuthScreen(){
           </button>
         </form>
       )}
+
+      <div style={{ display:'flex', gap:6, justifyContent:'center', marginTop:26 }}>
+        <span style={{ width:6, height:6, borderRadius:99, background:'#9b2f3a' }}/>
+        <span style={{ width:6, height:6, borderRadius:99, background:T.line2 }}/>
+        <span style={{ width:6, height:6, borderRadius:99, background:T.line2 }}/>
+      </div>
     </div></div>
   );
 }

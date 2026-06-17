@@ -14,6 +14,7 @@ import { PalateScreen } from './components/palate.jsx';
 import { ExploreScreen } from './components/explore.jsx';
 import { AddHub, SearchAdd, OrderImport } from './components/add.jsx';
 import { SnapLabel } from './components/snap.jsx';
+import { Onboarding } from './components/Onboarding.jsx';
 import { PairingSearch } from './components/pairing.jsx';
 import { DiningOut } from './components/diningout.jsx';
 import { supabase, supabaseConfigured } from './lib/supabase.js';
@@ -110,6 +111,12 @@ function VApp({ session }){
   useEffect(()=>{ const h=(e)=>flash(e.detail||'Daily limit reached.'); window.addEventListener('wm-ai-blocked', h); return ()=>window.removeEventListener('wm-ai-blocked', h); }, []);
   useEffect(()=>{ try{ const u=session.user; if(u && u.created_at && (Date.now()-new Date(u.created_at).getTime())<300000 && !localStorage.getItem('wm_signup_'+u.id)){ track('signup', { provider:u.app_metadata?.provider }); localStorage.setItem('wm_signup_'+u.id,'1'); } }catch(_){} }, []);
 
+  // Onboarding (Screens 2–3): show once for genuinely new users (no wines yet).
+  const [onboarding,setOnboarding]=useState(()=>{ try{ return !localStorage.getItem('wm_onboarded_'+userId); }catch(_){ return false; } });
+  const finishOnboarding=()=>{ try{ localStorage.setItem('wm_onboarded_'+userId,'1'); }catch(_){} setOnboarding(false); };
+  // An existing user (already has a cellar) isn't new — mark done silently, no flash.
+  useEffect(()=>{ if(onboarding && Array.isArray(wines) && wines.length>0){ try{ localStorage.setItem('wm_onboarded_'+userId,'1'); }catch(_){} setOnboarding(false); } },[wines]);
+
   // load this user's cellar + pairings
   useEffect(()=>{ let on=true;
     (async()=>{ try{
@@ -157,6 +164,8 @@ function VApp({ session }){
       {overlay==='search' && <PairingSearch wines={wines} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
       {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining} recent={dining}/>}
       {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} onAddPhoto={addPhoto} verdictVariant={t.verdictStyle}/>}
+
+      {onboarding && wines.length===0 && <Onboarding onSnap={()=>{ finishOnboarding(); setOverlay('snap'); }} onSkip={finishOnboarding}/>}
       </>}
 
       <VToast toast={toast}/>
