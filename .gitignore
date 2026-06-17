@@ -28,3 +28,6 @@ dist-ssr
 .env.local
 .env.*.local
 .vercel
+
+# Supabase CLI local state
+supabase/.temp/
