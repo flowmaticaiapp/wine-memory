@@ -163,7 +163,7 @@ function VApp({ session }){
     <div style={{ position:'relative', height:'100%', width:'100%', background:'#fff', overflow:'hidden' }}>
       {loading && <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}><svg width={30} height={30} viewBox="0 0 24 24" style={{ animation:'wmSpin .8s linear infinite' }}><circle cx="12" cy="12" r="9" fill="none" stroke={T.line2} strokeWidth="2.6"/><path d="M21 12a9 9 0 00-9-9" fill="none" stroke={T.ink} strokeWidth="2.6" strokeLinecap="round"/></svg></div>}
       {!loading && <>
-      {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onShopping={()=>setOverlay('addhub')} onHome={()=>ask('')} onDiningOut={()=>{ track('dining_opened'); setOverlay('diningout'); }} onExplore={()=>setTab('learn')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')} onLearn={()=>setOverlay('pour')}/>}
+      {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onShopping={()=>setOverlay('addhub')} onHome={()=>ask('')} onDiningOut={()=>{ track('dining_opened'); setOverlay('diningout'); }} onExplore={()=>setTab('learn')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')} onLearn={()=>setOverlay('pour')} onPalate={()=>setTab('palate')}/>}
       {tab==='collection' && <Collection wines={wines} cols={cols} filter={filter} setFilter={setFilter} hasSamples={hasSamples} onClearSamples={clearSamples} onOpen={(id)=>setOverlay({detail:id})} onSearch={()=>ask('')}/>}
       {tab==='palate' && (wines.length < 5
         ? <PalatePlaceholder count={wines.length} onAdd={()=>setOverlay('addhub')} onExplore={()=>setTab('learn')} onLearn={()=>setOverlay('pour')}/>
