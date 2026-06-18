@@ -92,14 +92,14 @@ export function AuthScreen(){
       </button>
       {gErr && <div style={{ marginTop:9, fontSize:13, color:T.no, lineHeight:1.4 }}>{gErr}</div>}
 
-      {/* Divider */}
+      {/* Magic-link hidden for beta — Resend domain not yet verified.
+          Flip SHOW_MAGIC_LINK = true to restore. Code stays intact. */}
+      {false && <>
       <div style={{ display:'flex', alignItems:'center', gap:12, margin:'22px 0 18px' }}>
         <div style={{ flex:1, height:1, background:T.line2 }}/>
         <span style={{ fontFamily:'var(--mono)', fontSize:10.5, letterSpacing:0.5, textTransform:'uppercase', color:T.ink3 }}>or</span>
         <div style={{ flex:1, height:1, background:T.line2 }}/>
       </div>
-
-      {/* Secondary — magic-link email */}
       {status === 'sent' ? (
         <div style={{ padding:'16px 14px', borderRadius:12, background:T.surface, border:`1px solid ${T.line}` }}>
           <div style={{ fontSize:15, fontWeight:680, color:T.ink }}>Check your email</div>
@@ -118,6 +118,7 @@ export function AuthScreen(){
           </button>
         </form>
       )}
+      </>}
 
       <div style={{ display:'flex', gap:6, justifyContent:'center', marginTop:26 }}>
         <span style={{ width:6, height:6, borderRadius:99, background:'#9b2f3a' }}/>

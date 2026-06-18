@@ -92,6 +92,21 @@ function useDeviceFit(){
   },[]);
 }
 
+function PhotoNudge({ onAdd, onDismiss }){
+  return (
+    <div style={{ position:'absolute', bottom:0, left:0, right:0, zIndex:85, padding:'0 14px', paddingBottom:'calc(14px + env(safe-area-inset-bottom))' }}>
+      <div style={{ background:'#fff', borderRadius:20, padding:'20px 20px 18px', boxShadow:'0 -2px 30px rgba(17,17,19,0.12), 0 0 0 1px rgba(17,17,19,0.07)' }}>
+        <div style={{ fontFamily:'var(--serif)', fontSize:21, fontWeight:500, color:T.ink, lineHeight:1.15, letterSpacing:-0.2 }}>Want to remember the label?</div>
+        <div style={{ fontSize:14, color:T.ink2, lineHeight:1.5, marginTop:7, marginBottom:18 }}>Add a quick photo so it's easy to spot later.</div>
+        <div style={{ display:'flex', gap:10 }}>
+          <button onClick={onAdd} style={{ flex:1, padding:'14px', borderRadius:13, border:'none', background:T.ink, color:'#fff', fontFamily:'var(--sans)', fontSize:15, fontWeight:680, cursor:'pointer' }}>Add label photo</button>
+          <button onClick={onDismiss} style={{ flexShrink:0, padding:'14px 18px', borderRadius:13, border:`1px solid ${T.line2}`, background:'transparent', color:T.ink2, fontFamily:'var(--sans)', fontSize:14, fontWeight:600, cursor:'pointer' }}>Not now</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function VApp({ session }){
   const userId = session.user.id;
   const [t,setTweak]=useTweaks(VTWEAKS);
@@ -122,6 +137,8 @@ function VApp({ session }){
 
   // First-wine celebration (one-time): the wine to celebrate, or null.
   const [firstSuccess,setFirstSuccess]=useState(null);
+  // After Search/Snap saves with no photo, nudge user to add one.
+  const [photoNudge,setPhotoNudge]=useState(null);
 
   // load this user's cellar + pairings
   useEffect(()=>{ let on=true;
@@ -143,7 +160,7 @@ function VApp({ session }){
     track('wine_added', { source:w.source });
     let firstTime=false; try{ firstTime = wasEmpty && !localStorage.getItem('wm_first_'+userId); }catch(_){}
     if(firstTime){ try{ localStorage.setItem('wm_first_'+userId,'1'); }catch(_){} setFirstSuccess(saved); }
-    else { flash('Added to your collection'); }
+    else { flash('Added to your collection'); if(!saved.photo) setPhotoNudge(saved); }
   }catch(e){ console.error(e); flash('Could not save'); } };
   const addMany=async(arr)=>{ const saved=await db.insertWines(userId, arr.map(autoEnrich)); setWines(ws=>[...saved,...ws]); return saved; };
   const viewToTry=()=>{ setOverlay(null); setTab('collection'); setFilter('totry'); };
@@ -184,6 +201,7 @@ function VApp({ session }){
 
       {onboarding && wines.length===0 && <Onboarding onSnap={()=>{ finishOnboarding(); setOverlay('snap'); }} onSkip={finishOnboarding}/>}
       {firstSuccess && <FirstSuccess wine={firstSuccess} onAsk={(q)=>{ setFirstSuccess(null); ask(q); }} onAddAnother={()=>{ setFirstSuccess(null); setOverlay('addhub'); }}/>}
+      {photoNudge && <PhotoNudge onAdd={()=>{ setPhotoNudge(null); setOverlay({detail:photoNudge.id}); }} onDismiss={()=>setPhotoNudge(null)}/>}
       </>}
 
       <VToast toast={toast}/>

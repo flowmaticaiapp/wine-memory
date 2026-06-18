@@ -22,7 +22,7 @@ function BottlePhoto({ wine, w, h, rounded=16, flat=false }){
       background:T.raised, border:flat?'none':`1px solid ${T.line}`,
       display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:small?5:9 }}>
       <Icon name="bottle" size={small?Math.round(h*0.34):Math.min(w*0.34,52)} color={T.ink4} stroke={1.4}/>
-      {!small && <div style={{ fontFamily:'var(--mono)', fontSize:Math.max(8.5,Math.min(10.5,w*0.07)), color:T.ink3, letterSpacing:0.4, textTransform:'uppercase' }}>Image needed</div>}
+      {!small && <div style={{ fontFamily:'var(--mono)', fontSize:Math.max(8.5,Math.min(10.5,w*0.07)), color:T.ink3, letterSpacing:0.4, textTransform:'uppercase' }}>Add label photo</div>}
     </div>
   );
 }
