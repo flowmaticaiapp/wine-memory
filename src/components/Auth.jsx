@@ -24,6 +24,20 @@ export function FullScreenLoader(){
     <path d="M21 12a9 9 0 00-9-9" fill="none" stroke={T.ink} strokeWidth="2.6" strokeLinecap="round"/></svg></div>;
 }
 
+// Never surface a raw error object / "{}" to the user. supabase-js can hand back
+// an error whose .message is a serialized body (e.g. "{}") when the server returns
+// an unexpected failure — map those, and known email-send failures, to clear copy.
+function friendlyAuthError(error){
+  const raw = (error && typeof error.message === 'string') ? error.message.trim() : '';
+  if (!raw || (raw.startsWith('{') && raw.endsWith('}'))) {
+    return 'Something went wrong sending the link. Use “Continue with Google,” or try again in a moment.';
+  }
+  if (/error sending|sending\s+\w*\s*email|smtp/i.test(raw)) {
+    return 'We couldn’t email a sign-in link right now. Use “Continue with Google,” or try again in a few minutes.';
+  }
+  return raw;
+}
+
 export function AuthScreen(){
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState('idle'); // idle | sending | sent | error
@@ -37,7 +51,7 @@ export function AuthScreen(){
       provider: 'google',
       options: { redirectTo: window.location.origin },
     });
-    if (error) { setGErr(error.message); setGBusy(false); }
+    if (error) { setGErr(friendlyAuthError(error)); setGBusy(false); }
     // on success the browser redirects to Google, so no further state needed
   };
 
@@ -49,7 +63,7 @@ export function AuthScreen(){
       email: email.trim(),
       options: { emailRedirectTo: window.location.origin },
     });
-    if (error) { setErr(error.message); setStatus('error'); }
+    if (error) { setErr(friendlyAuthError(error)); setStatus('error'); }
     else setStatus('sent');
   };
 
