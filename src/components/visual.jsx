@@ -215,7 +215,7 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
 
           {/* verdict */}
           <div style={{ height:24 }}/>
-          <Lbl>{wine.verdict==='totry'?'Tasted it? Set your verdict':'Your verdict'}</Lbl>
+          <Lbl>{wine.verdict==='totry'?'Opened it? Add your verdict':'Your verdict'}</Lbl>
           <VerdictPicker value={wine.verdict==='totry'?null:wine.verdict} onChange={(v)=>onUpdate(wine.id,{verdict:v})} variant={verdictVariant}/>
 
           {/* drinking context — only after the bottle's been opened (verdict set) */}
