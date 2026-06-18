@@ -10,7 +10,7 @@ import { IOSDevice } from './components/IOSFrame.jsx';
 import { useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakButton } from './components/TweaksPanel.jsx';
 import { HomeScreen } from './components/home.jsx';
 import { Collection, VisualDetail } from './components/visual.jsx';
-import { PalateScreen } from './components/palate.jsx';
+import { PalateScreen, PalatePlaceholder } from './components/palate.jsx';
 import { ExploreScreen } from './components/explore.jsx';
 import { AddHub, SearchAdd, OrderImport } from './components/add.jsx';
 import { SnapLabel } from './components/snap.jsx';
@@ -165,7 +165,9 @@ function VApp({ session }){
       {!loading && <>
       {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onShopping={()=>setOverlay('addhub')} onHome={()=>ask('')} onDiningOut={()=>{ track('dining_opened'); setOverlay('diningout'); }} onExplore={()=>setTab('learn')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')} onLearn={()=>setOverlay('pour')}/>}
       {tab==='collection' && <Collection wines={wines} cols={cols} filter={filter} setFilter={setFilter} hasSamples={hasSamples} onClearSamples={clearSamples} onOpen={(id)=>setOverlay({detail:id})} onSearch={()=>ask('')}/>}
-      {tab==='palate' && <PalateScreen wines={wines} pairings={pairings} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask}/>}
+      {tab==='palate' && (wines.length < 5
+        ? <PalatePlaceholder count={wines.length} onAdd={()=>setOverlay('addhub')} onExplore={()=>setTab('learn')} onLearn={()=>setOverlay('pour')}/>
+        : <PalateScreen wines={wines} pairings={pairings} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask}/>)}
       {tab==='learn' && <ExploreScreen region={exploreRegion} wines={wines} onPick={setExploreRegion} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask}/>}
       {tab==='account' && <AccountScreen email={session.user.email} provider={session.user.app_metadata?.provider}/>}
 

@@ -29,6 +29,58 @@ function Dots({ level }){
 
 function SectionLbl({ children }){ return <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.4, textTransform:'uppercase', margin:'24px 0 11px' }}>{children}</div>; }
 
+// Shown until the user has saved 5 wines — a taste portrait *developing*, not an
+// empty analytics page. Same "My Palate" header so the tab feels stable.
+function PalatePlaceholder({ count, onAdd, onExplore, onLearn }){
+  const pct = Math.min(100, Math.round((count/5)*100));
+  const UNLOCKS = [['glass','Grapes you love'],['pin','Regions you return to'],['sparkle','What to try next']];
+  return (
+    <div style={{ height:'100%', overflowX:'hidden', overflowY:'auto', background:'#fff' }}>
+      <div style={{ paddingTop:V_STATUS }}/>
+      <div style={{ padding:'8px 18px', paddingBottom:V_NAV+96 }}>
+        <h1 style={{ margin:0, fontSize:27, fontWeight:780, letterSpacing:-0.9 }}>My Palate</h1>
+
+        {/* developing hero + progress */}
+        <div style={{ marginTop:18, background:T.surface, borderRadius:18, padding:'22px 20px', boxShadow:'0 6px 18px rgba(22,20,15,0.06)' }}>
+          <span style={{ display:'inline-flex', alignItems:'center', gap:7, fontFamily:'var(--mono)', fontSize:9.5, fontWeight:600, letterSpacing:'.16em', textTransform:'uppercase', color:'#9b2f3a' }}>
+            <Icon name="sparkle" size={12} color="#9b2f3a"/> Taste portrait</span>
+          <div style={{ fontFamily:'var(--serif)', fontSize:25, color:T.ink, lineHeight:1.12, marginTop:9 }}>Your taste portrait is <em style={{ fontStyle:'italic' }}>developing.</em></div>
+          <p style={{ margin:'9px 0 0', fontFamily:'var(--sans)', fontSize:14, lineHeight:1.5, color:T.ink2 }}>Save a few more wines and patterns will start to appear.</p>
+          <div style={{ marginTop:20 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:7 }}>
+              <span style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink2, letterSpacing:0.2 }}>{count} of 5 wines saved</span>
+              <span style={{ fontFamily:'var(--mono)', fontSize:11, color:'#9b2f3a' }}>{pct}%</span>
+            </div>
+            <div style={{ height:8, borderRadius:99, background:T.raised, overflow:'hidden' }}>
+              <div style={{ width:pct+'%', height:'100%', borderRadius:99, background:'#9b2f3a', transition:'width .4s' }}/>
+            </div>
+          </div>
+        </div>
+
+        {/* what unlocks */}
+        <div style={{ marginTop:16, fontFamily:'var(--mono)', fontSize:10.5, color:T.ink3, letterSpacing:'.16em', textTransform:'uppercase' }}>What unlocks at 5</div>
+        <div style={{ marginTop:11, display:'flex', flexDirection:'column', gap:9 }}>
+          {UNLOCKS.map(([ic,label])=>(
+            <div key={label} style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 15px', background:'#fff', border:`1px solid ${T.line}`, borderRadius:14, opacity:0.72 }}>
+              <span style={{ width:34, height:34, borderRadius:9, background:T.canvas, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}><Icon name={ic} size={17} color={T.ink3}/></span>
+              <span style={{ flex:1, fontFamily:'var(--serif)', fontSize:16.5, color:T.ink2 }}>{label}</span>
+              <Icon name="lock" size={15} color={T.ink4}/>
+            </div>
+          ))}
+        </div>
+
+        {/* CTAs */}
+        <button onClick={onAdd} style={{ width:'100%', marginTop:20, padding:'15px', borderRadius:13, border:'none', background:T.ink, color:'#fff', fontFamily:'var(--sans)', fontSize:15, fontWeight:680, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+          <Icon name="plus" size={18} color="#fff"/> Add a wine</button>
+        <div style={{ marginTop:12, display:'flex', gap:10 }}>
+          <button onClick={onExplore} style={{ flex:1, padding:'13px 8px', borderRadius:12, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:13, fontWeight:620, cursor:'pointer' }}>Explore regions</button>
+          <button onClick={onLearn} style={{ flex:1, padding:'13px 8px', borderRadius:12, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:13, fontWeight:620, cursor:'pointer' }}>Learn in 30 sec</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PalateScreen({ wines, pairings, onOpenWine, onAsk }){
   const sig = tasteSignature(wines);
   const loved = regionsYouLove(wines);
@@ -128,4 +180,4 @@ function PalateScreen({ wines, pairings, onOpenWine, onAsk }){
   );
 }
 
-export { PalateScreen };
+export { PalateScreen, PalatePlaceholder };
