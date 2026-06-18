@@ -34,6 +34,16 @@ const VERDICT_ORDER = ['buy','maybe','no']; // the settable verdicts (To Try is 
 // ── Quick note tags (optional, memory-flavoured not technical) ──
 const QUICK_TAGS = ['Great value','Special occasion','Crowd-pleaser','Weeknight','Worth the splurge','Cellar a few years','Too jammy','Funky','Crushable','Gift-worthy'];
 
+// "Found at" shops for the To Try (shopping) save mode. Hard-coded for now;
+// stored on the wine's `source` field as a plain string, so a future
+// Settings → "My Wine Spots" custom list can replace this with zero schema
+// change. 'Other' reveals a free-text input.
+const WINE_SPOTS = ['Publix','Total Wine','Kroger','Whole Foods','Fresh Market','Harvest Wine Market','Other'];
+
+// Drink-context options for the Tasted save mode. Stored on the wine's `where`
+// field (plain text), so adding options here never needs a migration.
+const DRINK_PLACES = [['home','Home'],['restaurant','Restaurant'],['winery','Winery'],['friends',"Friend's house"],['vacation','Vacation'],['other','Other']];
+
 // ── Seed wines ───────────────────────────────────────────
 // loc:[lng,lat] persisted for the future map. note = personal memory.
 const SEED = [
@@ -310,7 +320,7 @@ const DETECTED_BOTTLES = [
 ];
 
 export {
-  T, VERDICTS, VERDICT_ORDER, QUICK_TAGS, SEED, SAMPLE_ORDER, PARSED_ORDER, SEARCH_INDEX,
+  T, VERDICTS, VERDICT_ORDER, QUICK_TAGS, WINE_SPOTS, DRINK_PLACES, SEED, SAMPLE_ORDER, PARSED_ORDER, SEARCH_INDEX,
   FLAVOR_FAMILIES, ENRICH, PAIRING_GROUPS, autoEnrich, parseOrder, styleLabel, EATING_EXAMPLES,
   SAVED_PAIRING_SCHEMA, newSavedPairing, DINING_TYPES, DINING_EXPERIENCE_SCHEMA, newDiningExperience,
   DETECTED_BOTTLES,

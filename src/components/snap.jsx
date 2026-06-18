@@ -6,6 +6,7 @@ import React from 'react';
 import { T } from '../lib/data.js';
 import { Icon, VerdictPicker, typeColor, WineBrief } from './ui.jsx';
 import { Panel, Spinner } from './add.jsx';
+import { FoundAtFields, spotSource } from './savemode.jsx';
 import { supabase } from '../lib/supabase.js';
 import { invokeAI } from '../lib/ai.js';
 import { track } from '../lib/analytics.js';
@@ -35,7 +36,8 @@ function SnapLabel({ onClose, onSave, onSearchInstead, verdictVariant='expressiv
   const [step, setStep] = snUS('capture');   // capture | identifying | confirm
   const [photo, setPhoto] = snUS(null);
   const [f, setF] = snUS(null);               // identified fields (editable)
-  const [verdict, setVerdict] = snUS(null);
+  const [spot, setSpot] = snUS(null);
+  const [otherSpot, setOtherSpot] = snUS('');
   const [note, setNote] = snUS('');
   const fileRef = snUR(null);
 
@@ -64,10 +66,11 @@ function SnapLabel({ onClose, onSave, onSearchInstead, verdictVariant='expressiv
 
   const save = ()=>{
     const hasLoc = f && f.lng!=null && f.lat!=null;
-    onSave({ id:'w'+Date.now(), photo, producer:f.producer||'Unknown producer', name:f.name||'Unknown wine',
+    const base = { id:'w'+Date.now(), photo, producer:f.producer||'Unknown producer', name:f.name||'Unknown wine',
       vintage:f.vintage||'NV', type:f.type, grape:f.grape, region:f.region, country:f.country, ...(hasLoc?{loc:[f.lng,f.lat]}:{}),
       blurb:f.blurb||'', style:f.style||'', tastesLike:f.tastesLike||[], pairsWith:f.pairsWith||[],
-      verdict: verdict||'totry', tags:[], note, where:'home', source:'Snap a label', price:null, added:snToday(), sample:false });
+      tags:[], note, price:null, added:snToday(), sample:false };
+    onSave({ ...base, verdict:'totry', where:null, source: spotSource(spot, otherSpot) || 'Snap a label' });
   };
   const lowConfidence = f && (!f.found || f.confidence==='low' || f.error);
 
@@ -140,21 +143,13 @@ function SnapLabel({ onClose, onSave, onSearchInstead, verdictVariant='expressiv
           <div style={{ flex:1 }}><Field label="Country" value={f.country} onChange={v=>setF({...f,country:v})} placeholder="Country"/></div>
         </div>
 
-        {/* verdict */}
-        <div style={{ height:12 }}/>
-        <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.4, textTransform:'uppercase', marginBottom:11 }}>Your verdict</div>
-        <VerdictPicker value={verdict==='totry'?null:verdict} onChange={setVerdict} variant={verdictVariant}/>
-        <button onClick={()=>setVerdict('totry')} style={{ width:'100%', marginTop:9, padding:'11px', borderRadius:11, cursor:'pointer', background:verdict==='totry'?T.totryBg:'#fff', border:`1px solid ${verdict==='totry'?T.totry:T.line2}`, color:verdict==='totry'?T.totry:T.ink2, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-          <Icon name="clock" size={15} color={verdict==='totry'?T.totry:T.ink3}/> Haven’t tried it yet — add to To Try</button>
-
-        {/* note */}
-        <div style={{ height:18 }}/>
-        <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.4, textTransform:'uppercase', marginBottom:9 }}>Note <span style={{ textTransform:'none', letterSpacing:0, color:T.ink4 }}>· optional</span></div>
-        <textarea value={note} onChange={e=>setNote(e.target.value)} rows={2} placeholder="Where you were, who you were with…"
-          style={{ width:'100%', boxSizing:'border-box', border:`1px solid ${T.line2}`, borderRadius:12, padding:'12px', fontFamily:'var(--sans)', fontSize:14.5, lineHeight:1.5, color:T.ink, resize:'none', outline:'none' }}/>
+        {/* where you found it + optional note */}
+        <div style={{ height:14 }}/>
+        <FoundAtFields spot={spot} setSpot={setSpot} otherSpot={otherSpot} setOtherSpot={setOtherSpot} note={note} setNote={setNote}/>
       </div>
       <div style={{ flexShrink:0, padding:'12px 18px calc(14px + env(safe-area-inset-bottom))', borderTop:`1px solid ${T.line}`, background:'#fff' }}>
-        <button onClick={save} style={{ width:'100%', padding:'16px', borderRadius:14, border:'none', background:T.ink, color:'#fff', fontFamily:'var(--sans)', fontSize:15.5, fontWeight:700, cursor:'pointer' }}>Save to collection</button>
+        <button onClick={save} style={{ width:'100%', padding:'16px', borderRadius:14, border:'none', cursor:'pointer',
+          background:T.ink, color:'#fff', fontFamily:'var(--sans)', fontSize:15.5, fontWeight:700 }}>Add to Cellar</button>
       </div>
     </Panel>
   );

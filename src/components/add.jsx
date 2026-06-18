@@ -4,6 +4,7 @@
 import React from 'react';
 import { T, QUICK_TAGS, SAMPLE_ORDER, parseOrder } from '../lib/data.js';
 import { Icon, LabelTile, VerdictPicker, Chip, typeColor, WineBrief } from './ui.jsx';
+import { FoundAtFields, spotSource } from './savemode.jsx';
 import { BottlePhoto } from './bottle.jsx';
 import { IOSKeyboard } from './IOSFrame.jsx';
 import { supabase } from '../lib/supabase.js';
@@ -188,16 +189,16 @@ function SearchError({ onRetry }){
 
 // ── Confirm card (verdict REQUIRED) ──────────────────────
 function ConfirmCard({ match, onBack, onClose, onSave, verdictVariant }) {
-  const [verdict, setVerdict] = aUS(null);
+  // Searched/scanned wines save as To Try — verdict + drinking context come
+  // later, on Wine Detail, once the bottle's actually been opened.
   const [note, setNote] = aUS('');
-  const [where, setWhere] = aUS('home');
-  const [tags, setTags] = aUS([]);
-  const canSave = !!verdict;
+  const [spot, setSpot] = aUS(null);
+  const [otherSpot, setOtherSpot] = aUS('');
 
   const save = ()=>{
-    onSave({ ...match, id:'w'+Date.now(), verdict, note, where, tags, grape:match.grape||'', source:'Quick add', price:match.price??null, added:todayISO(), sample:false });
+    onSave({ ...match, id:'w'+Date.now(), note, tags:[], grape:match.grape||'', price:match.price??null, added:todayISO(), sample:false,
+      verdict:'totry', where:null, source: spotSource(spot, otherSpot) || 'Quick add' });
   };
-  const toggle = (t)=> setTags(x=> x.includes(t)? x.filter(y=>y!==t): [...x,t]);
 
   return (
     <Panel onClose={onClose} title="Add to collection" onBack={onBack} backLabel="Search">
@@ -217,40 +218,15 @@ function ConfirmCard({ match, onBack, onClose, onSave, verdictVariant }) {
         {/* sommelier brief — what it is & why you'd enjoy it */}
         <WineBrief wine={match}/>
 
-        {/* verdict — required */}
+        {/* where you found it + optional note */}
         <div style={{ height:22 }}/>
-        <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:12 }}>
-          <span style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.5, textTransform:'uppercase' }}>Your verdict</span>
-          <span style={{ fontSize:11, color:T.no, fontWeight:600 }}>· required</span>
-        </div>
-        <VerdictPicker value={verdict} onChange={setVerdict} variant={verdictVariant}/>
-
-        {/* personal note */}
-        <div style={{ height:24 }}/>
-        <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.5, textTransform:'uppercase', marginBottom:10 }}>Note <span style={{ textTransform:'none', letterSpacing:0 }}>· optional</span></div>
-        <textarea value={note} onChange={e=>setNote(e.target.value)} rows={2} placeholder="Who you were with, the meal, the moment…"
-          style={{ width:'100%', boxSizing:'border-box', border:`1px solid ${T.line2}`, borderRadius:12, padding:'12px', fontFamily:'var(--sans)', fontSize:14.5, lineHeight:1.5, color:T.ink, resize:'none', outline:'none' }}/>
-
-        {/* where */}
-        <div style={{ height:18 }}/>
-        <div style={{ display:'flex', gap:8 }}>
-          {[['home','Home'],['restaurant','Restaurant'],['winery','Winery']].map(([w,l])=>(
-            <button key={w} onClick={()=>setWhere(w)} style={{ flex:1, padding:'10px 6px', borderRadius:10, cursor:'pointer', background:where===w?T.ink:'#fff', border:`1px solid ${where===w?T.ink:T.line2}`, color:where===w?'#fff':T.ink2, fontFamily:'var(--sans)', fontSize:13, fontWeight:600 }}>{l}</button>
-          ))}
-        </div>
-
-        {/* quick tags */}
-        <div style={{ height:22 }}/>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-          {QUICK_TAGS.slice(0,6).map(t=> <Chip key={t} label={t} on={tags.includes(t)} onClick={()=>toggle(t)} mini/>)}
-        </div>
+        <FoundAtFields spot={spot} setSpot={setSpot} otherSpot={otherSpot} setOtherSpot={setOtherSpot} note={note} setNote={setNote}/>
       </div>
 
       {/* save bar */}
       <div style={{ flexShrink:0, padding:'12px 18px calc(14px + env(safe-area-inset-bottom))', borderTop:`1px solid ${T.line}`, background:'#fff' }}>
-        <button disabled={!canSave} onClick={save} style={{ width:'100%', padding:'16px', borderRadius:14, border:'none', cursor:canSave?'pointer':'default',
-          background:canSave?T.ink:T.raised, color:canSave?'#fff':T.ink4, fontFamily:'var(--sans)', fontSize:15.5, fontWeight:700, transition:'all .15s' }}>
-          {canSave?'Save to collection':'Pick a verdict to save'}</button>
+        <button onClick={save} style={{ width:'100%', padding:'16px', borderRadius:14, border:'none', cursor:'pointer',
+          background:T.ink, color:'#fff', fontFamily:'var(--sans)', fontSize:15.5, fontWeight:700 }}>Add to Cellar</button>
       </div>
     </Panel>
   );

@@ -189,7 +189,8 @@ function WineBrief({ wine }) {
 }
 
 function WhereTag({ where, color = T.ink3 }) {
-  const map = { home:['home','Home'], restaurant:['glass','Restaurant'], winery:['pin','Winery'] };
+  const map = { home:['home','Home'], restaurant:['glass','Restaurant'], winery:['pin','Winery'],
+    friends:['user',"Friend's house"], vacation:['pin','Vacation'], other:['glass','Other'] };
   const [ic,label] = map[where] || map.home;
   return (
     <span style={{ display:'inline-flex', alignItems:'center', gap:5, color, fontFamily:'var(--sans)', fontSize:12.5, fontWeight:500 }}>

@@ -6,6 +6,7 @@ import { Icon, VerdictBadge, VerdictPicker, WhereTag, typeColor, WineBrief } fro
 import { BottlePhoto, FlavorBars } from './bottle.jsx';
 import { V_STATUS, V_NAV, CONTENT_W, famOf, clamp } from '../lib/constants.js';
 import { fileToJpegDataUrl } from '../lib/image.js';
+import { DrinkContext } from './savemode.jsx';
 
 const { useState: vUS, useMemo: vUM, useEffect: vUE, useRef: vUR } = React;
 
@@ -217,6 +218,12 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
           <Lbl>{wine.verdict==='totry'?'Tasted it? Set your verdict':'Your verdict'}</Lbl>
           <VerdictPicker value={wine.verdict==='totry'?null:wine.verdict} onChange={(v)=>onUpdate(wine.id,{verdict:v})} variant={verdictVariant}/>
 
+          {/* drinking context — only after the bottle's been opened (verdict set) */}
+          {wine.verdict!=='totry' && <>
+            <div style={{ height:22 }}/>
+            <DrinkContext where={wine.where} onChange={(w)=>onUpdate(wine.id,{where:w})}/>
+          </>}
+
           {/* flavor profile */}
           {wine.flavor && <>
             <div style={{ height:26 }}/>
@@ -269,11 +276,12 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
             </button>
           )}
 
-          {/* provenance */}
+          {/* provenance — To Try shows "Found at" (shop); Tasted shows where it was enjoyed */}
           <div style={{ height:22 }}/>
           <div style={{ display:'flex', alignItems:'center', gap:14, fontSize:12.5, color:T.ink3, flexWrap:'wrap' }}>
-            <WhereTag where={wine.where}/>
-            <span>·</span><span>{wine.source}</span>
+            {wine.verdict==='totry'
+              ? (wine.source && <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}><Icon name="pin" size={13} color={T.ink3}/> Found at {wine.source}</span>)
+              : <>{wine.where && <WhereTag where={wine.where}/>}{wine.where && wine.source && <span>·</span>}{wine.source && <span>{wine.source}</span>}</>}
             {wine.price!=null && <><span>·</span><span style={{ fontFamily:'var(--mono)' }}>${Number(wine.price)%1===0?wine.price:Number(wine.price).toFixed(2)}</span></>}
           </div>
         </div>
