@@ -10,10 +10,13 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { autoEnrich } from '../src/lib/data.js';
 import { personalWines, tasteSignature, regionsYouLove, groupByRegion, exploreNext } from '../src/lib/palate.js';
 import { storagePath } from '../src/lib/photopath.js';
+
+const sommelierSource = readFileSync(new URL('../supabase/functions/sommelier/index.ts', import.meta.url), 'utf8');
 
 // ── fixtures ────────────────────────────────────────────────────────
 const flavor = { body:4, acidity:4, tannin:4, fruit:3, oak:2 };
@@ -117,4 +120,30 @@ test('storagePath leaves non-Storage values alone', () => {
   assert.equal(storagePath(undefined), null);
   assert.equal(storagePath(''), null);
   assert.equal(storagePath(42), null);
+});
+
+// ── 4. Public-web research must precede specific recommendations ───
+
+test('sommelier uses bounded server-side web search', () => {
+  assert.match(sommelierSource, /web_search_20250305/);
+  assert.match(sommelierSource, /const MAX_WEB_SEARCHES = 3/);
+  assert.match(sommelierSource, /tool_choice:\s*\{ type: "any" \}/);
+});
+
+test('preferred voices are search priorities, never automatic authorities', () => {
+  for (const source of ['JamesSuckling.com', 'WineAccess.com', 'WineForNormalPeople.com']) {
+    assert.ok(sommelierSource.includes(source), `${source} is missing from the research strategy`);
+  }
+  assert.match(sommelierSource, /source preference is not evidence/i);
+});
+
+test('specific claims require exact cited evidence', () => {
+  assert.match(sommelierSource, /Never transfer a score, review, drinking window, or award between vintages/);
+  assert.match(sommelierSource, /verify producer, cuvee,? and (?:the relevant )?vintage/i);
+  assert.match(sommelierSource, /selectEvidenceSources\(research\.evidence, parsed\.sourceIds\)/,
+    'returned links must be selected from the server-created evidence registry');
+});
+
+test('Vivino is excluded from automated research', () => {
+  assert.match(sommelierSource, /blocked_domains:\s*\["vivino\.com"\]/);
 });

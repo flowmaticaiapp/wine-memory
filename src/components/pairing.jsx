@@ -135,6 +135,9 @@ function AvoidNote({ text }){
 // the answer experience does not need redesigning around them.
 const BASIS_LABEL = {
   ai:          'General wine knowledge · not checked against a wine source',
+  researched:  'Checked against public wine sources',
+  no_evidence: 'Public sources checked · no specific evidence used',
+  unavailable: 'Public research unavailable · general wine knowledge',
   rule:        'General pairing guidance built into Wine Memory',
   unreachable: 'Offline · general pairing guidance',
   unusable:    'Couldn’t complete that · general pairing guidance',
@@ -200,12 +203,14 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
       if (!supabase) throw new Error('not configured');
       const r = await askSommelier(Q, wines);   // model classifies pairing vs. answer
       if (r && r.kind==='pairing' && r.primary){
-        const out = { dish:r.dish||Q, primary:r.primary, others:r.others||[], avoid:[], avoidNote:r.avoidNote||'', limit:priceLimit(Q) };
+        const out = { dish:r.dish||Q, primary:r.primary, others:r.others||[], avoid:[], avoidNote:r.avoidNote||'',
+          sources:r.sources||[], researchStatus:r.researchStatus||'no_evidence', limit:priceLimit(Q) };
         const d = { mode:'pairing', ...out, owned:ownedMatches(out, wines) };
         setData(d); remember(d, Q);
         setPhase('pairing');
       } else if (r && r.kind==='answer' && (r.text||'').trim()){
-        const d = { mode:'answer', text:r.text.trim(), basis:'ai' };
+        const d = { mode:'answer', text:r.text.trim(), sources:r.sources||[],
+          basis:(r.sources||[]).length ? 'researched' : (r.researchStatus||'no_evidence') };
         setData(d); remember(d, Q);
         setPhase('answer');
       } else {
@@ -312,6 +317,12 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
             <div style={{ fontSize:16.5, fontWeight:700, color:T.ink, letterSpacing:-0.3, marginTop:3 }}>{data.primary.deeperTitle}</div>
           </div>}
 
+          {data.primary.bottle && <div style={{ marginTop:14, padding:'12px 14px', border:`1px solid ${T.buy}`, background:T.buyBg, borderRadius:12 }}>
+            <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.13em', textTransform:'uppercase', color:T.buy }}>Source-verified bottle</div>
+            <div style={{ fontSize:15.5, fontWeight:720, color:T.ink, marginTop:4 }}>{data.primary.bottle}</div>
+            {data.primary.bottleWhy && <div style={{ fontSize:13, color:T.ink2, lineHeight:1.45, marginTop:4 }}>{data.primary.bottleWhy}</div>}
+          </div>}
+
           <div style={{ fontSize:14.5, color:T.ink2, lineHeight:1.5, marginTop:8 }}>{data.primary.why}</div>
 
           {/* On the shelf — the exact words to look for */}
@@ -372,7 +383,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
               <div style={{ fontSize:15.5, fontWeight:720, letterSpacing:-0.3, marginBottom:2 }}>How the alternatives differ</div>
               {data.others.slice(0,2).map((o,i)=> <StyleNote key={i} grape={o.grape} why={o.why} direction={o.direction}/>)}
             </div>}
-            <BasisLine basis={data.offline ? (data.offlineReason || 'unreachable') : 'ai'} sources={data.sources}/>
+            <BasisLine basis={data.offline ? (data.offlineReason || 'unreachable') : ((data.sources||[]).length ? 'researched' : (data.researchStatus||'no_evidence'))} sources={data.sources}/>
           </div>}
 
           {/* learning */}

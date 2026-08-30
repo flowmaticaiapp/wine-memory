@@ -7,9 +7,12 @@
 // Personalized with the user's owned grapes/verdicts. Key stays server-side.
 
 import { gate } from "../_shared/auth.ts";
+import { citedEvidence, selectEvidenceSources } from "../_shared/research-evidence.js";
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const MODEL = Deno.env.get("SOMMELIER_MODEL") ?? "claude-sonnet-4-6";
+const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const MAX_WEB_SEARCHES = 3;
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -35,8 +38,10 @@ const SCHEMA = {
         deeper: { type: "string", description: "2 sentences on that region and what to expect from it" },
         lookFor: { type: "array", items: { type: "string" }, description: "2-3 PRACTICAL clues for finding this in a shop or on a list: label terms, appellation names, body, sweetness, tannin, oak or alcohol level. Concrete and findable, e.g. 'German Riesling marked Kabinett — gently off-dry' or 'Alcohol at or below 11%'. Never a producer or a specific bottle." },
         matchGrapes: { type: "array", items: { type: "string" }, description: "Primary grape plus closely related grapes" },
+        bottle: { type: "string", description: "Optional exact producer, cuvee and vintage supported by the research evidence. Empty when exact identity is not verified." },
+        bottleWhy: { type: "string", description: "One short evidence-grounded reason for the exact bottle. Empty when bottle is empty." },
       },
-      required: ["grape", "why", "deeperTitle", "deeper", "lookFor", "matchGrapes"],
+      required: ["grape", "why", "deeperTitle", "deeper", "lookFor", "matchGrapes", "bottle", "bottleWhy"],
     },
     avoidNote: {
       type: "string",
@@ -56,9 +61,73 @@ const SCHEMA = {
         required: ["direction", "grape", "why"],
       },
     },
+    sourceIds: {
+      type: "array",
+      items: { type: "integer" },
+      description: "Only IDs from the supplied evidence registry that directly support claims used in the answer. Empty when no evidence was usable.",
+    },
   },
-  required: ["kind"],
+  required: ["kind", "sourceIds"],
 };
+
+type Evidence = { id: number; title: string; url: string; citedText: string };
+
+function anthropicHeaders(): Record<string, string> {
+  return {
+    "content-type": "application/json",
+    "x-api-key": ANTHROPIC_API_KEY ?? "",
+    "anthropic-version": "2023-06-01",
+  };
+}
+
+async function researchQuestion(query: string): Promise<{ evidence: Evidence[]; status: "researched" | "no_evidence" | "unavailable" }> {
+  const prompt =
+    `Research this wine question before it is answered: "${query}"\n\n` +
+    `You MUST perform web search. Search narrowly and cite every factual research note. ` +
+    `When relevant, your FIRST search must look for the question on JamesSuckling.com, WineAccess.com, and WineForNormalPeople.com because the user values those voices. If that search is not useful, broaden. ` +
+    `Then broaden to primary producer pages, appellation or regional bodies, and reputable wine education or merchant pages. ` +
+    `Preferred sources are preferences, not proof: use them only when they actually address the question. ` +
+    `Never infer an exact critic score from a search snippet or a different vintage. Never treat a retailer's tasting note as independent critical consensus. ` +
+    `For bottle claims, verify producer, cuvee, and vintage independently and keep vintage-specific facts attached to that vintage. ` +
+    `Return concise research notes, not the final consumer answer. If evidence is thin, say so.`;
+
+  try {
+    let messages: unknown[] = [{ role: "user", content: prompt }];
+    for (let turn = 0; turn < 3; turn++) {
+      const res = await fetch(ANTHROPIC_URL, {
+        method: "POST",
+        headers: anthropicHeaders(),
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 1400,
+          messages,
+          tools: [{
+            type: "web_search_20250305",
+            name: "web_search",
+            max_uses: MAX_WEB_SEARCHES,
+            blocked_domains: ["vivino.com"],
+          }],
+          tool_choice: { type: "any" },
+        }),
+      });
+      if (!res.ok) {
+        console.error("Research search failed", res.status, await res.text());
+        return { evidence: [], status: "unavailable" };
+      }
+      const data = await res.json();
+      if (data.stop_reason === "pause_turn") {
+        messages = [...messages, { role: "assistant", content: data.content }];
+        continue;
+      }
+      const evidence = citedEvidence(data.content) as Evidence[];
+      return { evidence, status: evidence.length ? "researched" : "no_evidence" };
+    }
+    return { evidence: [], status: "unavailable" };
+  } catch (e) {
+    console.error("Research search error", e);
+    return { evidence: [], status: "unavailable" };
+  }
+}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -81,31 +150,35 @@ Deno.serve(async (req) => {
     if (query.length < 2) return json({ kind: "answer", text: "" });
     const ownedGrapes = typeof body.ownedGrapes === "string" && body.ownedGrapes ? body.ownedGrapes : "none yet";
     const owned = Array.isArray(body.owned) ? body.owned.slice(0, 80) : [];
+    const research = await researchQuestion(query);
+    const evidenceText = research.evidence.length
+      ? research.evidence.map(e => `[S${e.id}] ${e.title}\nURL: ${e.url}\nEvidence: ${e.citedText || "The cited page supported the research note."}`).join("\n\n")
+      : "No usable cited public-web evidence was retrieved.";
 
     const prompt =
       `You are the sommelier inside someone's personal wine app — warm, expert, and a good teacher. Classify their question and respond.\n\n` +
-      // Phase 1 of the trust standard: uncertainty changes the ANSWER, not just a
-      // label under it. This app has no catalogue, price, availability or critic
-      // retrieval, so anything bottle-specific could only come from model memory.
-      `WHAT YOU MUST NOT DO. This app has no wine catalogue, no price data, no availability data and no critic reviews, so you cannot verify anything about a specific bottle:\n` +
-      `- Never recommend a specific purchasable bottle by producer and cuvee (e.g. "Ridge Lytton Springs 2020"). Recommend a GRAPE, REGION or STYLE instead, and say what to look for on a shelf or a wine list.\n` +
-      `- Never state or estimate a score, rating, price, availability, award, drinking window or specific vintage as though it were fact.\n` +
-      `- Never say that a critic, publication or merchant recommends something.\n` +
-      `- Asked something like "best Pinot Noir under $25", answer with the styles and regions that deliver value at that level and how to recognise them, never with invented bottles or prices.\n` +
+      `You have a registry of public-web evidence below. Treat it as the ONLY authority for bottle-specific, vintage-specific, critic, score, price, award, availability, and current claims. General pairing principles may use established wine knowledge.\n` +
+      `- A source preference is not evidence. Mention James Suckling, Wine Access, Wine for Normal People, or any other source only when its registry entry directly supports the statement.\n` +
+      `- Never transfer a score, review, drinking window, or award between vintages. Never fill a missing vintage by guessing.\n` +
+      `- A price or availability claim requires a current merchant source and must be phrased as observed, not guaranteed.\n` +
+      `- Recommend an exact bottle only when the registry verifies producer, cuvee and the relevant vintage (when a vintage is named). Otherwise stop at grape, style, region or appellation.\n` +
+      `- Put only the integer IDs of sources actually used into sourceIds. Never invent an ID, title, URL, quote or source.\n` +
       `- Naming a producer is fine when the user asked you to EXPLAIN one, or as an illustration of a region's style. The rule is about telling someone to buy a particular bottle.\n` +
       `Stay warm and concise while doing this. A style-level answer should feel like useful advice, not like a refusal. Trust comes from being accurate and explaining your reasoning, not from hedging.\n\n` +
+      `EVIDENCE REGISTRY (${research.status}):\n${evidenceText}\n\n` +
       `If it is a FOOD PAIRING question (what wine to drink with a specific dish, food, meal, or occasion), set kind="pairing".\n` +
       // A pairing answer is incomplete if it stops at abstract characteristics.
       // "Structured, savoury, high-acid" is not something anyone can buy.
       `A PAIRING ANSWER IS INCOMPLETE IF IT ONLY DESCRIBES ABSTRACT CHARACTERISTICS. Words like "structured", "savoury" or "high-acid" describe a wine; they do not help someone standing in a shop. Every answer must translate them into a recognisable choice.\n` +
       `Go to the MOST SPECIFIC level the evidence supports, and no further:\n` +
       `  pairing principle -> needed characteristics -> grape or blend -> region or appellation -> a verified bottle.\n` +
-      `You have no research layer, so you stop at region or appellation. Never the last step.\n\n` +
+      `Use an exact bottle only when the evidence registry supports the last step.\n\n` +
       `Fill: dish (short name); primary{ grape (the best choice: a grape, blend or established style, never a producer), ` +
       `why (2 plain-language sentences connecting the wine's characteristics to the DISH — its weight, sauce, acidity, sweetness, salt, fat, spice and umami, whichever actually apply), ` +
       `deeperTitle (the region or appellation level, e.g. "Northern Rhône Syrah — Crozes-Hermitage or Saint-Joseph"), deeper (2 sentences on that region), ` +
       `lookFor (2-3 practical shop clues: label terms, appellation names, body, sweetness, tannin, oak, alcohol level), ` +
       `matchGrapes (the primary grape plus closely related grapes) }; ` +
+      `primary.bottle and primary.bottleWhy name one verified exact bottle only when the evidence threshold above is met; otherwise both are empty strings. ` +
       `others (ONE or TWO alternatives, each with a direction saying how it CHANGES the experience, and a one-sentence why — two only when the second is genuinely a different direction); ` +
       `and avoidNote (one sentence, ONLY when a meaningful conflict exists — empty string otherwise, never manufactured).\n` +
       `Rank the strongest option first. Do not list every possible grape or region. Keep it concise.\n` +
@@ -121,13 +194,9 @@ Deno.serve(async (req) => {
     const callClaude = (withEffort: boolean): Promise<Response> => {
       const output_config: Record<string, unknown> = { format: { type: "json_schema", schema: SCHEMA } };
       if (withEffort) output_config.effort = "low";
-      return fetch("https://api.anthropic.com/v1/messages", {
+      return fetch(ANTHROPIC_URL, {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-        },
+        headers: anthropicHeaders(),
         body: JSON.stringify({
           model: MODEL,
           max_tokens: 1024,
@@ -151,9 +220,11 @@ Deno.serve(async (req) => {
     }
 
     const data = await res.json();
-    const text = (data.content ?? []).find((b: { type: string }) => b.type === "text")?.text ?? "{}";
+    const text = [...(data.content ?? [])].reverse().find((b: { type: string }) => b.type === "text")?.text ?? "{}";
     const parsed = JSON.parse(text);
-    return json(parsed);
+    const sources = selectEvidenceSources(research.evidence, parsed.sourceIds);
+    delete parsed.sourceIds;
+    return json({ ...parsed, sources, researchStatus: sources.length ? "researched" : research.status });
   } catch (e) {
     console.error("sommelier error", e);
     return json({ error: "Sommelier error." }, 500);
