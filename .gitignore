@@ -31,3 +31,6 @@ dist-ssr
 
 # Supabase CLI local state
 supabase/.temp/
+
+# Local production backups (may contain private user data)
+wine-memory-backup/
