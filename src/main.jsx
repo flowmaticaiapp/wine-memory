@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 
-import { T, autoEnrich, newDiningExperience } from './lib/data.js';
+import { T, newDiningExperience } from './lib/data.js';
+import { personalWines } from './lib/palate.js';
 import { Icon } from './components/ui.jsx';
 import { IOSDevice } from './components/IOSFrame.jsx';
 import { useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakButton } from './components/TweaksPanel.jsx';
@@ -155,26 +156,30 @@ function VApp({ session }){
   const updateWine=(id,patch)=>{ if(patch.note) track('note_added'); setWines(ws=>ws.map(w=>w.id===id?{...w,...patch}:w)); db.updateWine(id,patch).catch(e=>console.error('Update failed', e)); };
   const addWine=async(w)=>{ try{
     const wasEmpty = Array.isArray(wines) && wines.length===0;
-    const saved=await db.insertWine(userId, autoEnrich(w));
+    const saved=await db.insertWine(userId, w);
     setWines(ws=>[saved,...ws]); setOverlay(null);
     track('wine_added', { source:w.source });
     let firstTime=false; try{ firstTime = wasEmpty && !localStorage.getItem('wm_first_'+userId); }catch(_){}
     if(firstTime){ try{ localStorage.setItem('wm_first_'+userId,'1'); }catch(_){} setFirstSuccess(saved); }
     else { flash('Added to your collection'); if(!saved.photo) setPhotoNudge(saved); }
   }catch(e){ console.error(e); flash('Could not save'); } };
-  const addMany=async(arr)=>{ const saved=await db.insertWines(userId, arr.map(autoEnrich)); setWines(ws=>[...saved,...ws]); return saved; };
+  const addMany=async(arr)=>{ const saved=await db.insertWines(userId, arr); setWines(ws=>[...saved,...ws]); return saved; };
   const viewToTry=()=>{ setOverlay(null); setTab('collection'); setFilter('totry'); };
   const clearSamples=async()=>{ try{ await db.deleteSamples(); setWines(ws=>ws.filter(w=>!w.sample)); }catch(e){ console.error(e); } };
   const ask=(q)=>{ setSeed(q||''); setOverlay('search'); };
   const explore=(r)=>{ setExploreRegion(r); setOverlay('explore'); };
   const savePairing=async(p)=>{ try{ const sp=await db.insertPairing(userId,p); setPairings(ps=>[sp,...ps]); flash('Saved to My Palate'); }catch(e){ console.error(e); } };
-  const addPhoto=async(id,dataUrl)=>{ try{ const url=await db.setWinePhoto(userId,id,dataUrl); setWines(ws=>ws.map(w=>w.id===id?{...w,photo:url}:w)); flash('Photo added'); }catch(e){ console.error('photo upload failed', e); flash('Could not upload photo'); } };
+  const addPhoto=async(id,dataUrl)=>{ try{ const p=await db.setWinePhoto(userId,id,dataUrl); setWines(ws=>ws.map(w=>w.id===id?{...w,photo:p.photo,photoPath:p.photoPath}:w)); flash('Photo added'); }catch(e){ console.error('photo upload failed', e); flash('Could not upload photo'); } };
   const saveDining=async({experience,pairing})=>{ try{ const saved=await db.insertDining(userId,experience); setDining(ds=>[saved,...ds]); track('dining_saved'); }catch(e){ console.error("save dining failed", e); flash("Could not save dining"); } if(pairing){ try{ const sp=await db.insertPairing(userId,pairing); setPairings(ps=>[sp,...ps]); }catch(e){ console.error(e); } } };
 
   const navTo=(t)=>{ setOverlay(null); setTab(t); };
   const detail = (overlay&&overlay.detail&&wines)? wines.find(w=>w.id===overlay.detail):null;
   const fullPanel = ['searchadd','import','search','diningout','snap','pour'].includes(overlay);
   const hasSamples = wines? wines.some(w=>w.sample) : false;
+  // The palate gate must count the SAME wines the palate engine will use.
+  // Counting samples here would open the portrait on demo bottles and then hand
+  // the user an empty result, because palate.js excludes them.
+  const palateCount = wines? personalWines(wines).length : 0;
 
   const screen = (
     <div style={{ position:'relative', height:'100%', width:'100%', background:'#fff', overflow:'hidden' }}>
@@ -182,8 +187,8 @@ function VApp({ session }){
       {!loading && <>
       {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onShopping={()=>setOverlay('addhub')} onHome={()=>ask('')} onDiningOut={()=>{ track('dining_opened'); setOverlay('diningout'); }} onExplore={()=>setTab('learn')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')} onLearn={()=>setOverlay('pour')} onPalate={()=>setTab('palate')}/>}
       {tab==='collection' && <Collection wines={wines} cols={cols} filter={filter} setFilter={setFilter} hasSamples={hasSamples} onClearSamples={clearSamples} onOpen={(id)=>setOverlay({detail:id})} onSearch={()=>ask('')}/>}
-      {tab==='palate' && (wines.length < 5
-        ? <PalatePlaceholder count={wines.length} onAdd={()=>setOverlay('addhub')} onExplore={()=>setTab('learn')} onLearn={()=>setOverlay('pour')}/>
+      {tab==='palate' && (palateCount < 5
+        ? <PalatePlaceholder count={palateCount} onAdd={()=>setOverlay('addhub')} onExplore={()=>setTab('learn')} onLearn={()=>setOverlay('pour')}/>
         : <PalateScreen wines={wines} pairings={pairings} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask}/>)}
       {tab==='learn' && <ExploreScreen region={exploreRegion} wines={wines} onPick={setExploreRegion} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask}/>}
       {tab==='account' && <AccountScreen email={session.user.email} provider={session.user.app_metadata?.provider}/>}

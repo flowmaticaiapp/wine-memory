@@ -2,14 +2,15 @@
 // and uploads bottle photos to Storage. RLS scopes everything to the signed-in user,
 // so queries never need an explicit user filter.
 import { supabase } from './supabase.js';
+import { STORAGE_PREFIX, PHOTO_URL_TTL_SECONDS, storagePath } from './photopath.js';
+
+export { storagePath };
 
 // tastesLike/pairsWith use PostgREST column aliases so fetched rows come back
 // camelCase (matching the client wine object); blurb/style map 1:1.
 const WINE_COLS = 'id,producer,name,vintage,type,grape,region,country,loc,verdict,tags,note,where,source,price,photo,family,flavor,pairings,blurb,style,tastesLike:tastes_like,pairsWith:pairs_with,sample,added';
 
 // ── photos ──────────────────────────────────────────────────────────
-const STORAGE_PREFIX = 'storage:';
-
 // Snap/Scan hand us a base64 data URL. Store only the private object path in
 // the database; a short-lived signed URL is created when the wine is loaded.
 async function maybeUploadPhoto(userId, photo){
@@ -22,30 +23,42 @@ async function maybeUploadPhoto(userId, photo){
   return STORAGE_PREFIX + path;
 }
 
-// Support both new private-path records and old public URLs so the privacy
-// migration does not break photos already saved by users.
-function storagePath(photo){
-  if (!photo) return null;
-  if (photo.startsWith(STORAGE_PREFIX)) return photo.slice(STORAGE_PREFIX.length);
-  const marker = '/storage/v1/object/public/bottle-photos/';
-  const at = photo.indexOf(marker);
-  return at >= 0 ? decodeURIComponent(photo.slice(at + marker.length)) : null;
+// Sign a whole cellar's photos in ONE request. The previous version issued a
+// separate createSignedUrl call per wine, so opening a 50-bottle cellar meant
+// 50 round-trips on every load.
+async function signPaths(paths){
+  const signed = new Map();
+  const unique = [...new Set(paths.filter(Boolean))];
+  if (!unique.length) return signed;
+  const { data, error } = await supabase.storage.from('bottle-photos')
+    .createSignedUrls(unique, PHOTO_URL_TTL_SECONDS);
+  if (error){ console.error('Could not create private photo URLs', error); return signed; }
+  for (const row of (data || [])){
+    if (row && row.path && row.signedUrl && !row.error) signed.set(row.path, row.signedUrl);
+  }
+  return signed;
 }
 
-async function displayPhoto(photo){
-  const path = storagePath(photo);
-  if (!path) return photo || null;
-  const { data, error } = await supabase.storage.from('bottle-photos')
-    .createSignedUrl(path, 60 * 60 * 24);
-  if (error) {
-    console.error('Could not create private photo URL', error);
-    return null;
-  }
-  return data.signedUrl;
+// Attach a display URL WITHOUT losing the stored value. `photoPath` always
+// carries what the database holds, so a failed signing round-trip degrades to a
+// placeholder that can be retried on the next load. The previous version
+// returned null and dropped the path, permanently blanking a user's photo for
+// the session on any transient Storage error.
+function attachPhoto(wine, signed){
+  const stored = wine.photo ?? null;
+  const path = storagePath(stored);
+  if (!path) return { ...wine, photo: stored, photoPath: null };
+  return { ...wine, photo: signed.get(path) ?? null, photoPath: stored };
+}
+
+async function hydrateWines(rows){
+  const list = rows || [];
+  const signed = await signPaths(list.map(w => storagePath(w.photo)));
+  return list.map(w => attachPhoto(w, signed));
 }
 
 async function hydrateWine(wine){
-  return { ...wine, photo:await displayPhoto(wine.photo) };
+  return (await hydrateWines([wine]))[0];
 }
 
 // ── wines ───────────────────────────────────────────────────────────
@@ -64,7 +77,7 @@ function wineToRow(w, photo){
 export async function fetchWines(){
   const { data, error } = await supabase.from('wines').select(WINE_COLS).order('created_at', { ascending:false });
   if (error) throw error;
-  return Promise.all(data.map(hydrateWine));
+  return hydrateWines(data);
 }
 
 export async function insertWine(userId, w){
@@ -78,20 +91,32 @@ export async function insertWines(userId, arr){
   const rows = await Promise.all(arr.map(async w => wineToRow(w, await maybeUploadPhoto(userId, w.photo))));
   const { data, error } = await supabase.from('wines').insert(rows).select(WINE_COLS);
   if (error) throw error;
-  return Promise.all(data.map(hydrateWine));
+  return hydrateWines(data);
 }
 
+// Fields that exist only on the hydrated client object and must never be
+// written back. `photo` on a hydrated wine is a short-lived SIGNED URL —
+// persisting one would replace the wine's real photo reference with an
+// expiring token. Photos are changed through setWinePhoto only.
+const CLIENT_ONLY_FIELDS = ['photoPath', 'photo'];
+
 export async function updateWine(id, patch){
-  const { error } = await supabase.from('wines').update(patch).eq('id', id);
+  const clean = { ...(patch || {}) };
+  for (const k of CLIENT_ONLY_FIELDS) delete clean[k];
+  if (!Object.keys(clean).length) return;
+  const { error } = await supabase.from('wines').update(clean).eq('id', id);
   if (error) throw error;
 }
 
 // Upload a (base64 data URL) photo and attach it to an existing wine.
+// Returns { photo, photoPath }: the signed URL to display now, and the stored
+// reference, so the caller's state matches what a fresh fetch would produce.
 export async function setWinePhoto(userId, id, dataUrl){
   const stored = await maybeUploadPhoto(userId, dataUrl);
   const { error } = await supabase.from('wines').update({ photo: stored }).eq('id', id);
   if (error) throw error;
-  return displayPhoto(stored);
+  const signed = await signPaths([storagePath(stored)]);
+  return { photo: signed.get(storagePath(stored)) ?? null, photoPath: stored };
 }
 
 export async function deleteSamples(){

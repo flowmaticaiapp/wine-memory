@@ -48,10 +48,23 @@ function resolveRegion(w){
 
 const VWEIGHT = { buy:3, maybe:1, totry:0.5, no:-2 };
 
+// ── The personalization pool ────────────────────────────────────────
+// THE single place that decides which wines may influence anything the app
+// claims about the user's taste. Sample/demo bottles are the user's to look at,
+// but must never shape a derived claim. Every derivation — here, in the pairing
+// screen, and the palate gate in main.jsx — routes through this one function so
+// the rule cannot drift apart across call sites again.
+export function personalWines(wines){
+  return (wines || []).filter(w => !w.sample);
+}
+
 // Group the cellar by region, with verdict tallies, affinity score, and a center.
+// DISPLAY function: this powers the Taste Atlas map, which shows what is actually
+// in the cellar, samples included. Callers that derive a CLAIM about the user's
+// taste must pass personalWines(wines) — see regionsYouLove and exploreNext.
 export function groupByRegion(wines){
   const m = {};
-  for (const w of wines.filter(w=>!w.sample)){
+  for (const w of (wines || [])){
     const r = resolveRegion(w);
     if (!m[r.key]) m[r.key] = { ...r, wines:[], buy:0, maybe:0, no:0, totry:0, score:0 };
     const g = m[r.key];
@@ -64,8 +77,9 @@ export function groupByRegion(wines){
 }
 
 // Regions you love — verdict-weighted ranking (Buy Again dominates).
+// A claim about the user's taste, so samples are excluded.
 export function regionsYouLove(wines, limit=6){
-  return groupByRegion(wines).filter(g=>g.score>0)
+  return groupByRegion(personalWines(wines)).filter(g=>g.score>0)
     .sort((a,b)=> b.score-a.score || b.buy-a.buy)
     .slice(0, limit);
 }
@@ -81,7 +95,7 @@ export function affinityLevel(score){
 // ── Taste signature: a phrase + fingerprint from your favorite wines ──
 const AX = ['body','acidity','tannin','fruit','oak'];
 export function tasteSignature(wines){
-  const personal = wines.filter(w=>!w.sample);
+  const personal = personalWines(wines);
   const buys = personal.filter(w=>w.verdict==='buy' && w.flavor);
   const rated = personal.filter(w=>w.verdict!=='totry' && w.flavor);
   const pool = buys.length>=2 ? buys : (rated.length ? rated : personal.filter(w=>w.flavor));
@@ -149,8 +163,10 @@ const EXPLORE_CANDIDATES = [
     grapes:['assyrtiko','sauvignon','chenin'], traits:['high-acid','white'] },
 ];
 
+// "What you already own" here is a claim about the user's cellar, so a sample
+// bottle must not suppress a suggestion — samples excluded.
 export function exploreNext(wines, signature, limit=2){
-  const owned = new Set(groupByRegion(wines).map(g=>g.label.toLowerCase()));
+  const owned = new Set(groupByRegion(personalWines(wines)).map(g=>g.label.toLowerCase()));
   const sig = signature || tasteSignature(wines) || { grapes:[], traits:[] };
   const userGrapes = (sig.grapes||[]).map(g=>g.toLowerCase());
   const userTraits = new Set(sig.traits||[]);

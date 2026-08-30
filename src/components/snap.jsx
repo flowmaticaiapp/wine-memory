@@ -4,7 +4,7 @@
 // Ported from app/snap.jsx.
 import React from 'react';
 import { T } from '../lib/data.js';
-import { Icon, VerdictPicker, typeColor, WineBrief } from './ui.jsx';
+import { Icon, VerdictPicker, typeColor, EditableBrief } from './ui.jsx';
 import { Panel, Spinner } from './add.jsx';
 import { FoundAtFields, spotSource } from './savemode.jsx';
 import { supabase } from '../lib/supabase.js';
@@ -123,8 +123,8 @@ function SnapLabel({ onClose, onSave, onSearchInstead, verdictVariant='expressiv
             <Icon name="search" size={16} color={T.ink}/> Search by name instead</button>
         )}
 
-        {/* sommelier brief — what it is & why you'd enjoy it */}
-        <div style={{ marginBottom:16 }}><WineBrief wine={f}/></div>
+        {/* AI brief — labelled and editable, so it can't be saved unreviewed */}
+        <div style={{ marginBottom:16 }}><EditableBrief value={f} onChange={patch=>setF({...f, ...patch})}/></div>
 
         <Field label="Producer" value={f.producer} onChange={v=>setF({...f,producer:v})} placeholder="Producer"/>
         <Field label="Wine name" value={f.name} onChange={v=>setF({...f,name:v})} placeholder="Wine name"/>

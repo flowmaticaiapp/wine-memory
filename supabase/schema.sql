@@ -92,9 +92,13 @@ grant select, insert, update, delete on public.dining_experiences  to authentica
 -- ── Storage: bottle photos ──────────────────────────────────────────
 -- Private bucket; reads and writes are scoped to the user's own folder:
 -- bottle-photos/{user_id}/{file}.jpg
+-- `do nothing` is deliberate and must stay. A fresh project gets a private
+-- bucket, but running this file against an EXISTING project must never flip a
+-- live bucket's visibility as a side effect. Changing visibility on a live
+-- project is a separate, explicitly-approved step: private_bottle_photos.sql.
 insert into storage.buckets (id, name, public)
 values ('bottle-photos', 'bottle-photos', false)
-on conflict (id) do update set public = false;
+on conflict (id) do nothing;
 
 drop policy if exists "photos public read"   on storage.objects;
 drop policy if exists "photos own read"       on storage.objects;

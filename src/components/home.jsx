@@ -2,6 +2,7 @@
 // (Learn + Explore) is available from the very first visit; personalization
 // (the taste-portrait thread, the cellar rail) is what grows in.
 import { T } from '../lib/data.js';
+import { personalWines } from '../lib/palate.js';
 import { Icon } from './ui.jsx';
 import { BottlePhoto } from './bottle.jsx';
 import { LearnCard } from './TodaysPour.jsx';
@@ -48,6 +49,9 @@ function PalateThread({ n, onPalate }){
 function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, onOpenWine, onCollection, onLearn, onPalate }){
   const recent = wines.slice().sort((a,b)=> new Date(b.added)-new Date(a.added)).slice(0,6);
   const n = wines.length;
+  // The "n of 5" taste-portrait progress must count the same wines the palate
+  // engine uses, or the thread reads "Ready" on demo bottles alone.
+  const personalN = personalWines(wines).length;
   const route = { shopping:onShopping, home:onHome, dining:onDiningOut, learn:onExplore };
   // At 0 wines, lead with starting the cellar — so trim the destination tiles to
   // the two that work with an empty cellar AND keep curiosity immediate:
@@ -101,7 +105,7 @@ function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, 
         {/* taste-portrait thread + cellar — only once there are wines */}
         {n > 0 ? (
           <div style={{ marginTop:24, borderTop:`1px solid ${T.line2}`, paddingTop:18, paddingBottom:V_NAV+96 }}>
-            <PalateThread n={n} onPalate={onPalate}/>
+            <PalateThread n={personalN} onPalate={onPalate}/>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', margin:'22px 0 14px' }}>
               <span style={{ fontFamily:'var(--sans)', fontSize:10.5, fontWeight:600, letterSpacing:'.24em', textTransform:'uppercase', color:T.ink3 }}>Your Cellar</span>
               <button onClick={onCollection} style={{ display:'inline-flex', alignItems:'center', gap:6, background:'none', border:'none', cursor:'pointer', fontFamily:'var(--sans)', fontSize:11, fontWeight:600, letterSpacing:'.16em', textTransform:'uppercase', color:T.ink2 }}>View all <Icon name="arrow" size={14} color={T.ink2}/></button>

@@ -42,20 +42,12 @@ const SCHEMA = {
           grape: { type: "string", description: "Primary grape(s)" },
           region: { type: "string", description: "Wine region, e.g. 'Barbaresco, Piedmont'" },
           country: { type: "string" },
-          family: { type: "string", enum: ["bold", "bright", "juicy", "wild"], description: "bold=full-bodied/structured, bright=high-acid/crisp, juicy=fruit-forward, wild=earthy/savoury" },
-          flavor: {
-            type: "object",
-            additionalProperties: false,
-            description: "Flavor profile, each axis an integer 0-5",
-            properties: {
-              body: { type: "integer" },
-              acidity: { type: "integer" },
-              tannin: { type: "integer" },
-              fruit: { type: "integer" },
-              oak: { type: "integer" },
-            },
-            required: ["body", "acidity", "tannin", "fruit", "oak"],
-          },
+          // DELIBERATELY ABSENT: `family` and `flavor`.
+          // These were numeric 0-5 taste axes (body/acidity/tannin/fruit/oak)
+          // recalled from model memory, saved to the database, and then averaged
+          // into the user's taste portrait — presenting a guess as a measurement.
+          // Nothing verifies them, so the app no longer asks for or stores them.
+          // Do not reintroduce without a sourced provider and a provenance field.
           pairings: { type: "array", items: { type: "string" }, description: "2-3 food pairings" },
           blurb: { type: "string", description: "ONE vivid sommelier-style sentence, 20-30 words: what this wine is and why someone would enjoy it. Warm, educational, editorial — name the grape/region character and a vivid flavor note. Never salesy. E.g. 'Bright Albariño from coastal Galicia — citrus, peach, and saline minerality, made for seafood and warm afternoons.'" },
           style: { type: "string", description: "A 2-4 word style descriptor, e.g. 'Crisp coastal white', 'Bold structured red', 'Silky alpine red'." },
@@ -65,7 +57,7 @@ const SCHEMA = {
           lng: { type: "number", description: "Approx longitude of the region (optional)" },
           confidence: { type: "string", enum: ["high", "medium", "low"] },
         },
-        required: ["producer", "name", "vintage", "type", "grape", "region", "country", "family", "flavor", "pairings", "blurb", "style", "tastesLike", "pairsWith", "confidence"],
+        required: ["producer", "name", "vintage", "type", "grape", "region", "country", "pairings", "blurb", "style", "tastesLike", "pairsWith", "confidence"],
       },
     },
   },
@@ -97,7 +89,8 @@ Deno.serve(async (req) => {
       `Identify the most likely REAL wines that match — handle partial names, misspellings, and "producer + grape" or "producer + region" queries.\n` +
       `Return up to 3 candidates, best match first. For a clear single match, one candidate is fine; add close alternatives only when genuinely plausible.\n` +
       `Ground every field in real-world wine knowledge — do not invent a producer or bottling that doesn't exist. If you can't identify any real wine, return an empty matches array.\n` +
-      `Set confidence honestly (high = you're sure of the exact bottling; low = a guess). Flavor axes are integers 0-5. Provide approximate region lat/lng when you know them.\n` +
+      `Set confidence honestly (high = you're sure of the exact bottling; low = a guess). Provide approximate region lat/lng when you know them.\n` +
+      `Do NOT rate the wine on numeric scales and do not estimate scores, prices, or availability — the app deliberately stores no unverified numbers.\n` +
       `For each match also write, in the editorial voice of a warm sommelier: a "blurb" (ONE sentence, 20-30 words, what it is and why someone would enjoy it — concrete and educational, never marketing-speak), a 2-4 word "style", exactly 3 "tastesLike" flavor descriptors, and exactly 3 "pairsWith" food pairings.`;
 
     // Low effort keeps this snappy (wine ID is recall, not deep reasoning), but

@@ -10,6 +10,7 @@ import { Icon, VerdictBadge } from './ui.jsx';
 import { BottlePhoto, typeHue } from './bottle.jsx';
 import { Spinner } from './add.jsx';
 import { V_STATUS } from '../lib/constants.js';
+import { personalWines } from '../lib/palate.js';
 import { supabase } from '../lib/supabase.js';
 import { invokeAI } from '../lib/ai.js';
 import { track } from '../lib/analytics.js';
@@ -80,9 +81,12 @@ function heuristicPairing(query){
 }
 
 // Build the personalization payload the sommelier function expects.
+// Samples excluded: this payload is sent to the model AS the user's own taste,
+// so a demo bottle here would put words in the user's mouth.
 function collectionSummary(wines){
-  const owned = wines.map(w=>({ grape:w.grape||'', region:(w.region||'')+(w.country?', '+w.country:''), verdict:w.verdict }));
-  const gc={}; wines.forEach(w=>{ if(w.grape) gc[w.grape]=(gc[w.grape]||0)+1; });
+  const mine = personalWines(wines);
+  const owned = mine.map(w=>({ grape:w.grape||'', region:(w.region||'')+(w.country?', '+w.country:''), verdict:w.verdict }));
+  const gc={}; mine.forEach(w=>{ if(w.grape) gc[w.grape]=(gc[w.grape]||0)+1; });
   const ownedGrapes = Object.entries(gc).map(([g,n])=>g+' ('+n+')').join(', ') || 'none yet';
   return { owned, ownedGrapes };
 }
@@ -104,8 +108,10 @@ function ownedMatches(result, wines){
   const ord = { buy:0, totry:1, maybe:2, no:3 };
   return pool.sort((a,b)=> (ord[a.verdict]-ord[b.verdict])).slice(0,6);
 }
+// Powers the "We're learning your taste" banner — an explicit claim about the
+// user, so samples are excluded.
 function learnInsight(wines){
-  const buys = wines.filter(w=>w.verdict==='buy' && w.grape);
+  const buys = personalWines(wines).filter(w=>w.verdict==='buy' && w.grape);
   const tally = {}; buys.forEach(w=>{ tally[w.grape]=(tally[w.grape]||0)+1; });
   const top = Object.entries(tally).sort((a,b)=>b[1]-a[1])[0];
   return (top && top[1]>=2) ? top[0] : null;
@@ -130,6 +136,27 @@ function StyleNote({ grape, why }){
     <div style={{ padding:'13px 0', borderTop:`1px solid ${T.line}` }}>
       <div style={{ fontSize:15, fontWeight:700, color:T.ink, letterSpacing:-0.2 }}>{grape}</div>
       <div style={{ fontSize:13.5, color:T.ink2, lineHeight:1.5, marginTop:3 }}>{why}</div>
+    </div>
+  );
+}
+
+// ── Basis note ──────────────────────────────────────────────────────
+// EVERY sommelier result carries one of these. Labelling only the offline
+// fallback would be worse than labelling nothing: the absence of a warning
+// would teach the user that an unlabelled answer had been verified. It hasn't.
+const BASIS_COPY = {
+  unreachable: 'The AI sommelier is unavailable. This is a general pairing rule built into the app — not a researched bottle recommendation.',
+  unusable:    'The AI sommelier replied but the answer couldn’t be used. This is a general pairing rule built into the app — not a researched bottle recommendation.',
+  ai:          'AI suggestion — written from general wine knowledge. Not checked against critic reviews, prices, or a wine catalog.',
+};
+function BasisNote({ basis }){
+  const copy = BASIS_COPY[basis]; if (!copy) return null;
+  const warn = basis !== 'ai';
+  return (
+    <div style={{ display:'flex', gap:8, alignItems:'flex-start', marginBottom:14, padding:'10px 12px', borderRadius:10,
+      background: warn ? T.maybeBg : T.canvas, border:`1px solid ${warn ? 'transparent' : T.line}` }}>
+      <Icon name={warn ? 'edit' : 'sparkle'} size={14} color={warn ? T.maybe : T.ink3} style={{ flexShrink:0, marginTop:1 }}/>
+      <span style={{ fontSize:12.5, lineHeight:1.45, color: warn ? T.maybe : T.ink3 }}>{copy}</span>
     </div>
   );
 }
@@ -163,17 +190,20 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
         setData({ mode:'pairing', ...out, owned:ownedMatches(out, wines) });
         setPhase('pairing');
       } else if (r && r.kind==='answer' && (r.text||'').trim()){
-        setData({ mode:'answer', text:r.text.trim() });
+        setData({ mode:'answer', text:r.text.trim(), basis:'ai' });
         setPhase('answer');
       } else {
-        throw new Error('empty sommelier result');
+        const err = new Error('empty sommelier result'); err.unusable = true; throw err;
       }
     } catch(e){
       console.error('sommelier failed', e);
-      // Graceful offline fallback: pairing questions still get a useful answer.
+      // Graceful fallback: pairing questions still get a useful answer. Track
+      // WHY we fell back so the disclosure tells the truth — "unavailable" and
+      // "answered, but unusably" are different things and the banner says which.
       if (isPairingQuery(Q)){
         const out = heuristicPairing(Q);
-        setData({ mode:'pairing', ...out, owned:ownedMatches(out, wines), offline:true });
+        setData({ mode:'pairing', ...out, owned:ownedMatches(out, wines),
+          offline:true, offlineReason: e && e.unusable ? 'unusable' : 'unreachable' });
         setPhase('pairing');
       } else {
         setData({ mode:'answer', text:'Sorry — I couldn’t reach the sommelier just now. Please try again in a moment.' });
@@ -236,6 +266,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
             <span style={{ width:30, height:30, borderRadius:99, background:T.maybeBg, display:'flex', alignItems:'center', justifyContent:'center' }}><Icon name="sparkle" size={16} color={T.maybe}/></span>
             <span style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.3, textTransform:'uppercase' }}>Your sommelier</span>
           </div>
+          <BasisNote basis={data.basis}/>
           <AnswerText text={data.text}/>
           <button onClick={()=>{ setPhase('idle'); setQ(''); }} style={{ width:'100%', marginTop:22, padding:'13px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:14, fontWeight:600, cursor:'pointer' }}>Ask something else</button>
         </>}
@@ -247,7 +278,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
         </>}
 
         {phase==='pairing' && data && <>
-          {data.offline && <div style={{ marginBottom:14, padding:'10px 12px', borderRadius:10, background:T.maybeBg, color:T.maybe, fontSize:12.5, lineHeight:1.45 }}>The AI sommelier is unavailable. This is a general pairing rule, not a researched bottle recommendation.</div>}
+          <BasisNote basis={data.offline ? (data.offlineReason || 'unreachable') : 'ai'}/>
           <div style={{ fontFamily:'var(--mono)', fontSize:11.5, color:T.ink3, letterSpacing:0.3, textTransform:'uppercase' }}>For {data.dish}</div>
           {/* Layer 1 — the style */}
           <div style={{ marginTop:8 }}>

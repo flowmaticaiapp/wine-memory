@@ -188,6 +188,58 @@ function WineBrief({ wine }) {
   );
 }
 
+// ── EditableBrief — the AI brief, shown as a claim the user must approve ──
+// Before saving, `blurb`, `style`, `tastesLike` and `pairsWith` are written by
+// Claude from model knowledge, not looked up in any wine database. They used to
+// ride along invisibly: the user confirmed a producer and vintage on the confirm
+// screen and unknowingly saved four fields of unreviewed AI prose as facts about
+// their bottle. Here they are labelled, editable, and removable before save.
+const briefInput = {
+  width:'100%', boxSizing:'border-box', border:`1px solid ${T.line2}`, borderRadius:9,
+  padding:'9px 11px', fontFamily:'var(--sans)', fontSize:13.5, color:T.ink,
+  background:'#fff', outline:'none', resize:'vertical',
+};
+function BriefField({ label, hint, value, onChange, rows }){
+  return (
+    <div style={{ marginTop:10 }}>
+      <div style={{ fontFamily:'var(--mono)', fontSize:9.5, color:T.ink4, letterSpacing:'.1em', textTransform:'uppercase', marginBottom:4 }}>
+        {label}{hint && <span style={{ textTransform:'none', letterSpacing:0, color:T.ink4 }}> · {hint}</span>}
+      </div>
+      {rows
+        ? <textarea rows={rows} value={value} onChange={e=>onChange(e.target.value)} style={briefInput}/>
+        : <input value={value} onChange={e=>onChange(e.target.value)} style={{ ...briefInput, height:38 }}/>}
+    </div>
+  );
+}
+const csvToList = (s)=> String(s||'').split(',').map(x=>x.trim()).filter(Boolean);
+const listToCsv = (l)=> (Array.isArray(l) ? l : (l ? [l] : [])).join(', ');
+
+function EditableBrief({ value, onChange }){
+  const v = value || {};
+  const empty = !v.blurb && !v.style && !(v.tastesLike||[]).length && !(v.pairsWith||[]).length;
+  if (empty) return null;
+  return (
+    <div style={{ marginTop:14, padding:'13px 14px', borderRadius:13, background:T.canvas, border:`1px solid ${T.line2}` }}>
+      <div style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
+        <Icon name="sparkle" size={14} color={T.maybe} style={{ flexShrink:0, marginTop:2 }}/>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontFamily:'var(--mono)', fontSize:10, color:T.maybe, letterSpacing:'.12em', textTransform:'uppercase' }}>AI-written · not verified</div>
+          <div style={{ fontSize:12.5, color:T.ink2, lineHeight:1.45, marginTop:4 }}>
+            Written by AI from general wine knowledge — not looked up in a wine database, and not checked against critic reviews or prices. Edit anything that looks wrong, or clear it.
+          </div>
+        </div>
+        <button onClick={()=>onChange({ blurb:'', style:'', tastesLike:[], pairsWith:[] })}
+          style={{ flexShrink:0, background:'#fff', border:`1px solid ${T.line2}`, borderRadius:8, padding:'5px 10px', cursor:'pointer',
+            fontFamily:'var(--sans)', fontSize:11.5, fontWeight:620, color:T.ink2 }}>Clear</button>
+      </div>
+      <BriefField label="Description" rows={3} value={v.blurb||''} onChange={t=>onChange({ blurb:t })}/>
+      <BriefField label="Style" value={v.style||''} onChange={t=>onChange({ style:t })}/>
+      <BriefField label="Tastes like" hint="comma separated" value={listToCsv(v.tastesLike)} onChange={t=>onChange({ tastesLike:csvToList(t) })}/>
+      <BriefField label="Pairs with" hint="comma separated" value={listToCsv(v.pairsWith)} onChange={t=>onChange({ pairsWith:csvToList(t) })}/>
+    </div>
+  );
+}
+
 function WhereTag({ where, color = T.ink3 }) {
   const map = { home:['home','Home'], restaurant:['glass','Restaurant'], winery:['pin','Winery'],
     friends:['user',"Friend's house"], vacation:['pin','Vacation'], other:['glass','Other'] };
@@ -199,4 +251,4 @@ function WhereTag({ where, color = T.ink3 }) {
   );
 }
 
-export { Icon, VGlyph, LabelTile, typeColor, VerdictBadge, VerdictPicker, Chip, WhereTag, WineBrief };
+export { Icon, VGlyph, LabelTile, typeColor, VerdictBadge, VerdictPicker, Chip, WhereTag, WineBrief, EditableBrief };

@@ -4,7 +4,7 @@ import React from 'react';
 import { T, VERDICTS, FLAVOR_FAMILIES, PAIRING_GROUPS } from '../lib/data.js';
 import { Icon, VerdictBadge, VerdictPicker, WhereTag, typeColor, WineBrief } from './ui.jsx';
 import { BottlePhoto, FlavorBars } from './bottle.jsx';
-import { V_STATUS, V_NAV, CONTENT_W, famOf, clamp } from '../lib/constants.js';
+import { V_STATUS, V_NAV, CONTENT_W, famOf, FAM_NEUTRAL_HUE, clamp } from '../lib/constants.js';
 import { fileToJpegDataUrl } from '../lib/image.js';
 import { DrinkContext } from './savemode.jsx';
 
@@ -78,7 +78,16 @@ function Collection({ wines, cols, filter, setFilter, onOpen, onSearch, hasSampl
   const base = vUM(()=>{ let r = filter==='all'? wines : wines.filter(w=>w.verdict===filter);
     if (query.trim()){ const s=query.toLowerCase(); r = r.filter(w=>[w.producer,w.name,w.region,w.country,w.grape,w.note].join(' ').toLowerCase().includes(s)); }
     return r; },[wines,filter,query]);
-  const byFamily = vUM(()=> FLAVOR_FAMILIES.map(f=>({ f, list:base.filter(w=>w.family===f.id) })).filter(x=>x.list.length),[base]);
+  // Wines added since flavor families stopped being AI-invented have no family.
+  // They get an explicit "Not yet described" group rather than silently
+  // disappearing from this view — unknown is a state, not an absence.
+  const byFamily = vUM(()=>{
+    const known = FLAVOR_FAMILIES.map(f=>({ f, list:base.filter(w=>w.family===f.id) })).filter(x=>x.list.length);
+    const rest = base.filter(w=>!FLAVOR_FAMILIES.some(f=>f.id===w.family));
+    return rest.length
+      ? [...known, { f:{ id:'unknown', label:'Not yet described', sub:'No verified flavor profile for these bottles', hue:0 }, list:rest }]
+      : known;
+  },[base]);
   const byRegion = vUM(()=>{ const m={}; base.forEach(w=>{ const k=(w.country||w.region.split(',').slice(-1)[0].trim()); (m[k]=m[k]||[]).push(w); }); return Object.entries(m).sort((a,b)=>b[1].length-a[1].length); },[base]);
   const byPairing = vUM(()=> PAIRING_GROUPS.map(g=>({ g, list:base.filter(w=>(w.pairings||[]).some(p=>g.match.includes(p))) })).filter(x=>x.list.length),[base]);
   const colW = Math.floor((CONTENT_W - 12*(cols-1))/cols);
@@ -168,9 +177,12 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
   };
   const triggerPhoto = ()=>{ if(!photoBusy && photoInputRef.current) photoInputRef.current.click(); };
   const fam = famOf(wine.family);
-  const accent = `hsl(${fam.hue} 55% 46%)`;
+  const famHue = fam ? fam.hue : FAM_NEUTRAL_HUE;
+  const accent = `hsl(${famHue} 55% 46%)`;
   const tc = typeColor(wine.type);
-  const more = all.filter(w=>w.family===wine.family && w.id!==wine.id).slice(0,8);
+  // Only relate wines by a family they actually have — otherwise every
+  // un-described wine would appear "similar" to every other one.
+  const more = wine.family ? all.filter(w=>w.family===wine.family && w.id!==wine.id).slice(0,8) : [];
 
   return (
     <div style={{ position:'absolute', inset:0, zIndex:60, background:'#fff', display:'flex', flexDirection:'column' }}>
@@ -208,9 +220,9 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
           {/* sommelier brief — what it is & why you'd enjoy it (saved at identification) */}
           <WineBrief wine={wine}/>
 
-          {wine.flavor && <div style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:15, padding:'8px 14px', borderRadius:99, background:`hsl(${fam.hue} 60% 96%)`, border:`1px solid hsl(${fam.hue} 50% 84%)` }}>
+          {wine.flavor && fam && <div style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:15, padding:'8px 14px', borderRadius:99, background:`hsl(${famHue} 60% 96%)`, border:`1px solid hsl(${famHue} 50% 84%)` }}>
             <span style={{ width:9, height:9, borderRadius:3, background:accent }}/>
-            <span style={{ fontSize:13.5, fontWeight:680, color:`hsl(${fam.hue} 45% 32%)` }}>{fam.label}</span>
+            <span style={{ fontSize:13.5, fontWeight:680, color:`hsl(${famHue} 45% 32%)` }}>{fam.label}</span>
           </div>}
 
           {/* verdict */}
@@ -229,7 +241,7 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
             <div style={{ height:26 }}/>
             <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:14 }}>
               <Lbl inline>Flavor Profile</Lbl>
-              <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontFamily:'var(--mono)', fontSize:9.5, color:T.maybe, letterSpacing:0.3 }}><Icon name="sparkle" size={11} color={T.maybe}/> AI</span>
+              <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontFamily:'var(--mono)', fontSize:9.5, color:T.maybe, letterSpacing:0.3 }}><Icon name="sparkle" size={11} color={T.maybe}/> AI · UNVERIFIED</span>
             </div>
             <FlavorBars flavor={wine.flavor} color={accent}/>
           </>}

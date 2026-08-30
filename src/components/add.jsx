@@ -3,7 +3,7 @@
 // Ported from app/add.jsx.
 import React from 'react';
 import { T, QUICK_TAGS, SAMPLE_ORDER, parseOrder } from '../lib/data.js';
-import { Icon, LabelTile, VerdictPicker, Chip, typeColor, WineBrief } from './ui.jsx';
+import { Icon, LabelTile, VerdictPicker, Chip, typeColor, EditableBrief } from './ui.jsx';
 import { FoundAtFields, spotSource } from './savemode.jsx';
 import { BottlePhoto } from './bottle.jsx';
 import { IOSKeyboard } from './IOSFrame.jsx';
@@ -11,10 +11,15 @@ import { supabase } from '../lib/supabase.js';
 import { invokeAI } from '../lib/ai.js';
 
 // Map an AI search candidate to the app's wine-draft shape.
+// `family` and `flavor` are deliberately NOT carried over, even if a not-yet-
+// redeployed Edge Function still returns them. Those numeric 0-5 taste axes came
+// from model memory and were averaged into the user's taste portrait as though
+// they were measurements. Dropping them here means the client stays honest
+// regardless of which version of the function answers.
 function normalizeMatch(m){
   return {
     producer:m.producer, name:m.name, vintage:m.vintage, type:m.type, grape:m.grape||'',
-    region:m.region||'', country:m.country||'', family:m.family, flavor:m.flavor,
+    region:m.region||'', country:m.country||'',
     pairings:m.pairings||[], loc:(m.lng!=null&&m.lat!=null)?[m.lng,m.lat]:undefined,
     blurb:m.blurb||'', style:m.style||'', tastesLike:m.tastesLike||[], pairsWith:m.pairsWith||[],
   };
@@ -194,9 +199,15 @@ function ConfirmCard({ match, onBack, onClose, onSave, verdictVariant }) {
   const [note, setNote] = aUS('');
   const [spot, setSpot] = aUS(null);
   const [otherSpot, setOtherSpot] = aUS('');
+  // The AI brief is editable state, not a fixed property of the match: whatever
+  // the user leaves here is what gets saved.
+  const [brief, setBrief] = aUS({
+    blurb:match.blurb||'', style:match.style||'',
+    tastesLike:match.tastesLike||[], pairsWith:match.pairsWith||[],
+  });
 
   const save = ()=>{
-    onSave({ ...match, id:'w'+Date.now(), note, tags:[], grape:match.grape||'', price:match.price??null, added:todayISO(), sample:false,
+    onSave({ ...match, ...brief, id:'w'+Date.now(), note, tags:[], grape:match.grape||'', price:match.price??null, added:todayISO(), sample:false,
       verdict:'totry', where:null, source: spotSource(spot, otherSpot) || 'Quick add' });
   };
 
@@ -211,12 +222,12 @@ function ConfirmCard({ match, onBack, onClose, onSave, verdictVariant }) {
             <div style={{ fontSize:18, fontWeight:720, color:T.ink, letterSpacing:-0.4, lineHeight:1.15, marginTop:2 }}>{match.name||'Untitled wine'}</div>
             <div style={{ fontSize:13, color:T.ink2, marginTop:4 }}>{match.vintage} · {match.type}{match.grape?' · '+match.grape:''}</div>
             {match.region && <div style={{ fontSize:12.5, color:T.ink3, marginTop:4, display:'flex', alignItems:'center', gap:4 }}><Icon name="pin" size={13} color={T.ink3}/> {match.region}</div>}
-            {!match.manual && <div style={{ marginTop:7, display:'inline-flex', alignItems:'center', gap:5, fontFamily:'var(--mono)', fontSize:10, color:T.maybe, letterSpacing:0.3 }}><Icon name="sparkle" size={12} color={T.maybe}/> AI-FILLED</div>}
+            {!match.manual && <div style={{ marginTop:7, display:'inline-flex', alignItems:'center', gap:5, fontFamily:'var(--mono)', fontSize:10, color:T.maybe, letterSpacing:0.3 }}><Icon name="sparkle" size={12} color={T.maybe}/> AI SUGGESTION — CHECK DETAILS</div>}
           </div>
         </div>
 
-        {/* sommelier brief — what it is & why you'd enjoy it */}
-        <WineBrief wine={match}/>
+        {/* AI brief — labelled and editable, so it can't be saved unreviewed */}
+        <EditableBrief value={brief} onChange={patch=>setBrief(b=>({ ...b, ...patch }))}/>
 
         {/* where you found it + optional note */}
         <div style={{ height:22 }}/>
