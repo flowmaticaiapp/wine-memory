@@ -147,3 +147,7 @@ test('specific claims require exact cited evidence', () => {
 test('Vivino is excluded from automated research', () => {
   assert.match(sommelierSource, /blocked_domains:\s*\["vivino\.com"\]/);
 });
+
+test('web-search terms exclude personal and cellar information', () => {
+  assert.match(sommelierSource, /Never put a person's name, street address, email, account detail, private note, or cellar contents into a search query/);
+});

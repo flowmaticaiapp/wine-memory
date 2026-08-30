@@ -84,6 +84,7 @@ async function researchQuestion(query: string): Promise<{ evidence: Evidence[]; 
   const prompt =
     `Research this wine question before it is answered: "${query}"\n\n` +
     `You MUST perform web search. Search narrowly and cite every factual research note. ` +
+    `Formulate search terms only from the wine, food, region, vintage, critic, budget, or style concepts needed to answer. Never put a person's name, street address, email, account detail, private note, or cellar contents into a search query. ` +
     `When relevant, your FIRST search must look for the question on JamesSuckling.com, WineAccess.com, and WineForNormalPeople.com because the user values those voices. If that search is not useful, broaden. ` +
     `Then broaden to primary producer pages, appellation or regional bodies, and reputable wine education or merchant pages. ` +
     `Preferred sources are preferences, not proof: use them only when they actually address the question. ` +
