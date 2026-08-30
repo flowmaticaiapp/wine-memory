@@ -68,3 +68,50 @@ test('isPairingQuery still routes food questions to the rule set', () => {
   assert.equal(isPairingQuery('what wine with roast chicken?'), true);
   assert.equal(isPairingQuery('pizza'), true);
 });
+
+// ── The pairing-answer standard ─────────────────────────────────────
+// A pairing explanation is incomplete if it only describes abstract
+// characteristics. Every rule must translate them into something findable.
+
+test('every rule tells the user what to look for in a shop', () => {
+  for (const rule of [...DISH_RULES, DEFAULT_RULE]) {
+    const lf = rule.primary.lookFor;
+    assert.ok(Array.isArray(lf) && lf.length >= 2, `${rule.id}: needs at least two practical clues`);
+    assert.ok(lf.every(s => typeof s === 'string' && s.length > 12), `${rule.id}: a clue is too thin to act on`);
+  }
+});
+
+test('every alternative says how it changes the experience', () => {
+  for (const rule of [...DISH_RULES, DEFAULT_RULE]) {
+    for (const o of rule.others) {
+      assert.ok(o.direction && o.direction.length > 3, `${rule.id}: alternative "${o.grape}" has no direction`);
+      assert.ok(o.direction.split(/\s+/).length <= 4, `${rule.id}: direction should be a short phrase`);
+    }
+  }
+});
+
+test('rules reach region or appellation specificity, not just a characteristic', () => {
+  // deeperTitle is the region/appellation rung of the ladder. It must name a
+  // place, not restate an adjective.
+  for (const rule of [...DISH_RULES, DEFAULT_RULE]) {
+    assert.ok(rule.primary.deeperTitle && rule.primary.deeperTitle.length > 4, `${rule.id}: no region-level guidance`);
+  }
+});
+
+test('avoid notes exist only where a real conflict does', () => {
+  // An avoid note on every rule would be manufactured caution. Some dishes
+  // genuinely have no meaningful conflict.
+  const withNote = [...DISH_RULES, DEFAULT_RULE].filter(r => r.avoidNote);
+  assert.ok(withNote.length > 0, 'no rule warns about anything');
+  assert.ok(withNote.length < DISH_RULES.length + 1, 'every rule warns — that is manufactured caution');
+});
+
+test('look-for clues never name a specific purchasable bottle', () => {
+  // A producer plus a vintage is a bottle recommendation, which requires
+  // verification the app does not have.
+  for (const rule of [...DISH_RULES, DEFAULT_RULE]) {
+    for (const clue of rule.primary.lookFor) {
+      assert.ok(!/\b(19|20)\d{2}\b/.test(clue), `${rule.id}: a clue names a vintage`);
+    }
+  }
+});

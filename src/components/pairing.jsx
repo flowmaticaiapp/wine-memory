@@ -48,12 +48,27 @@ async function askSommelier(query, wines){
   return await invokeAI('sommelier', { query, owned, ownedGrapes });
 }
 
+// "From your cellar" must only offer a bottle that GENUINELY fits.
+//
+// The previous version reduced each grape to its first lowercased word and did a
+// substring test, so "Pinot Noir" became "pinot" and matched a Pinot Grigio —
+// a white — under a grilled-steak pairing. "Cabernet" likewise swallowed
+// Cabernet Franc. Matching is now on whole words against the wine's own grape
+// field first, falling back to the name only when no grape is recorded.
+const wordsOf = (s)=> String(s||'').toLowerCase().split(/[^a-zà-ÿ]+/).filter(Boolean);
+function grapeFits(wine, targets){
+  const hay = new Set(wordsOf(wine.grape || wine.name));
+  return targets.some(t=>{
+    const need = wordsOf(t);
+    // Every word of the target grape must be present: "pinot noir" needs both,
+    // so a Pinot Grigio no longer qualifies.
+    return need.length>0 && need.every(w=>hay.has(w));
+  });
+}
 function ownedMatches(result, wines){
-  const grapes = [ ...(result.primary.matchGrapes||[result.primary.grape]), ...((result.others||[]).map(o=>o.grape)) ];
-  const mg = grapes.map(g=>(g||'').toLowerCase().split(' ')[0]).filter(Boolean);
-  const avoid = (result.avoid||[]).map(a=>a.toLowerCase());
-  let pool = wines.filter(w=>{ const hay=((w.grape||'')+' '+w.name).toLowerCase();
-    return mg.some(g=>hay.includes(g)) && !avoid.some(a=>hay.includes(a)); });
+  const targets = [ ...(result.primary.matchGrapes||[result.primary.grape]), ...((result.others||[]).map(o=>o.grape)) ].filter(Boolean);
+  const avoid = (result.avoid||[]).filter(Boolean);
+  let pool = wines.filter(w=> grapeFits(w, targets) && !grapeFits(w, avoid));
   if (result.limit!=null) pool = pool.filter(w=> w.price==null || w.price<=result.limit);
   const ord = { buy:0, totry:1, maybe:2, no:3 };
   return pool.sort((a,b)=> (ord[a.verdict]-ord[b.verdict])).slice(0,6);
@@ -81,11 +96,46 @@ function OwnedRow({ w, onOpen }){
     </button>
   );
 }
-function StyleNote({ grape, why }){
+// An alternative has to say how it CHANGES the experience, not merely that it
+// also works — otherwise the user has no basis for choosing between them.
+function StyleNote({ grape, why, direction }){
   return (
     <div style={{ padding:'13px 0', borderTop:`1px solid ${T.line}` }}>
+      {direction && <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.12em', textTransform:'uppercase', color:T.maybe, marginBottom:3 }}>{direction}</div>}
       <div style={{ fontSize:15, fontWeight:700, color:T.ink, letterSpacing:-0.2 }}>{grape}</div>
       <div style={{ fontSize:13.5, color:T.ink2, lineHeight:1.5, marginTop:3 }}>{why}</div>
+    </div>
+  );
+}
+
+// "What to look for" is the step that turns an abstract characteristic into
+// something findable on a shelf. A pairing answer that stops at "high-acid,
+// savoury" has not finished the job.
+function LookFor({ items }){
+  const list = (items||[]).filter(Boolean); if (!list.length) return null;
+  return (
+    <div style={{ marginTop:22, padding:'14px 16px', background:T.canvas, border:`1px solid ${T.line}`, borderRadius:13 }}>
+      <div style={{ fontFamily:'var(--mono)', fontSize:10, letterSpacing:'.13em', textTransform:'uppercase', color:T.ink3, marginBottom:8 }}>What to look for</div>
+      <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
+        {list.map((t,i)=>(
+          <div key={i} style={{ display:'flex', gap:9, fontSize:13.5, color:T.ink2, lineHeight:1.45 }}>
+            <span style={{ flexShrink:0, width:4, height:4, borderRadius:99, background:T.ink4, marginTop:7 }}/>
+            <span>{t}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Shown only when a real conflict exists — an empty "avoid" section would be
+// noise, and would imply a warning where there is none.
+function AvoidNote({ text }){
+  if (!text) return null;
+  return (
+    <div style={{ marginTop:12, display:'flex', gap:9, padding:'12px 14px', background:T.noBg, borderRadius:11 }}>
+      <Icon name="x" size={15} color={T.no} style={{ flexShrink:0, marginTop:2 }}/>
+      <span style={{ fontSize:13, color:T.no, lineHeight:1.45 }}>{text}</span>
     </div>
   );
 }
@@ -99,10 +149,10 @@ function StyleNote({ grape, why }){
 // when a public-web research layer is added later it attaches links here, and
 // the answer experience does not need redesigning around them.
 const BASIS_LABEL = {
-  ai:          'Wine Memory AI · general wine knowledge, not checked against a wine source',
+  ai:          'General wine knowledge · not checked against a wine source',
   rule:        'General pairing guidance built into Wine Memory',
-  unreachable: 'Wine Memory AI is offline · general pairing guidance',
-  unusable:    'Wine Memory AI couldn’t answer · general pairing guidance',
+  unreachable: 'Offline · general pairing guidance',
+  unusable:    'Couldn’t complete that · general pairing guidance',
 };
 function BasisLine({ basis, sources }){
   const label = BASIS_LABEL[basis]; if (!label) return null;
@@ -147,7 +197,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
       if (!supabase) throw new Error('not configured');
       const r = await askSommelier(Q, wines);   // model classifies pairing vs. answer
       if (r && r.kind==='pairing' && r.primary){
-        const out = { dish:r.dish||Q, primary:r.primary, others:r.others||[], avoid:[], limit:priceLimit(Q) };
+        const out = { dish:r.dish||Q, primary:r.primary, others:r.others||[], avoid:[], avoidNote:r.avoidNote||'', limit:priceLimit(Q) };
         setData({ mode:'pairing', ...out, owned:ownedMatches(out, wines) });
         setPhase('pairing');
       } else if (r && r.kind==='answer' && (r.text||'').trim()){
@@ -167,7 +217,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
           offline:true, offlineReason: e && e.unusable ? 'unusable' : 'unreachable' });
         setPhase('pairing');
       } else {
-        setData({ mode:'answer', text:'Sorry — I couldn’t reach Wine Memory AI just now. Please try again in a moment.' });
+        setData({ mode:'answer', text:'Sorry — I couldn’t reach your sommelier just now. Please try again in a moment.' });
         setPhase('answer');
       }
     }
@@ -191,7 +241,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
         <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px 12px' }}>
           <div style={{ flex:1, display:'flex', alignItems:'center', gap:9, background:T.raised, border:`1.5px solid ${q?T.ink:T.line}`, borderRadius:12, padding:'0 12px', height:46 }}>
             <Icon name="sparkle" size={17} color={T.maybe}/>
-            <input autoFocus value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') run(); }} placeholder="Ask Wine Memory AI…" style={{ flex:1, border:'none', outline:'none', background:'transparent', fontFamily:'var(--sans)', fontSize:15.5, color:T.ink }}/>
+            <input autoFocus value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') run(); }} placeholder="Ask your sommelier…" style={{ flex:1, border:'none', outline:'none', background:'transparent', fontFamily:'var(--sans)', fontSize:15.5, color:T.ink }}/>
             {q && <button onClick={()=>{ setQ(''); setPhase('idle'); }} style={{ background:'none', border:'none', cursor:'pointer', padding:4, display:'flex' }}><Icon name="x" size={16} color={T.ink3}/></button>}
           </div>
           {q.trim() && q.trim() !== asked
@@ -202,7 +252,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
 
       <div style={{ flex:1, overflowX:'hidden', overflowY:'auto', padding:'16px 16px 40px' }}>
         {phase==='idle' && <>
-          <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.4, marginBottom:12, textTransform:'uppercase' }}>Ask Wine Memory AI</div>
+          <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.4, marginBottom:12, textTransform:'uppercase' }}>Ask your sommelier</div>
           <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
             {EXAMPLES.map(ex=>(
               <button key={ex} onClick={()=>run(ex)} style={{ display:'flex', alignItems:'center', gap:11, textAlign:'left', padding:'13px 14px', border:`1px solid ${T.line}`, background:'#fff', borderRadius:12, cursor:'pointer' }}>
@@ -225,7 +275,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
           <div style={{ fontSize:13, color:T.ink3, marginBottom:14 }}>You asked <span style={{ color:T.ink, fontWeight:620 }}>“{asked}”</span></div>
           <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
             <span style={{ width:30, height:30, borderRadius:99, background:T.maybeBg, display:'flex', alignItems:'center', justifyContent:'center' }}><Icon name="sparkle" size={16} color={T.maybe}/></span>
-            <span style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.3, textTransform:'uppercase' }}>Wine Memory AI</span>
+            <span style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.3, textTransform:'uppercase' }}>Your sommelier</span>
           </div>
           <AnswerText text={data.text}/>
           <BasisLine basis={data.basis} sources={data.sources}/>
@@ -252,6 +302,9 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
             <div style={{ fontSize:14, color:T.ink2, lineHeight:1.55, marginTop:5 }}>{data.primary.deeper}</div>
           </div>}
 
+          <LookFor items={data.primary.lookFor}/>
+          <AvoidNote text={data.avoidNote}/>
+
           {/* Layer 2 — your bottles */}
           <div style={{ marginTop:26 }}>
             <div style={{ fontSize:17, fontWeight:740, letterSpacing:-0.4, marginBottom:12 }}>From your collection</div>
@@ -263,7 +316,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
           {/* other styles */}
           {data.others && data.others.length>0 && <div style={{ marginTop:26 }}>
             <div style={{ fontSize:17, fontWeight:740, letterSpacing:-0.4, marginBottom:4 }}>Other styles that work</div>
-            {data.others.map((o,i)=> <StyleNote key={i} grape={o.grape} why={o.why}/>)}
+            {data.others.map((o,i)=> <StyleNote key={i} grape={o.grape} why={o.why} direction={o.direction}/>)}
           </div>}
 
           <BasisLine basis={data.offline ? (data.offlineReason || 'unreachable') : 'ai'} sources={data.sources}/>

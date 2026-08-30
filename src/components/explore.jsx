@@ -61,7 +61,7 @@ function ExploreScreen({ wines, onOpenWine, onAsk }){
         ) : (
           <div style={{ padding:'15px', border:`1px dashed ${T.line2}`, borderRadius:13, background:T.canvas }}>
             <div style={{ fontSize:13.5, color:T.ink2, lineHeight:1.5, marginBottom:10 }}>Can’t find “{query.trim()}” in the library yet.</div>
-            <button onClick={()=>onAsk(`Tell me about ${query.trim()} wine`)} style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'9px 14px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, cursor:'pointer' }}><Icon name="sparkle" size={15} color={T.maybe}/> Ask Wine Memory AI</button>
+            <button onClick={()=>onAsk(`Tell me about ${query.trim()} wine`)} style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'9px 14px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, cursor:'pointer' }}><Icon name="sparkle" size={15} color={T.maybe}/> Ask your sommelier</button>
           </div>
         )}
 
@@ -83,7 +83,7 @@ function ExploreScreen({ wines, onOpenWine, onAsk }){
           </div>
 
           {(r.prompts||[]).length>0 && <div style={{ marginTop:24 }}>
-            <Lbl3>Curious? Ask Wine Memory AI</Lbl3>
+            <Lbl3>Curious? Ask your sommelier</Lbl3>
             <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
               {r.prompts.map(p=>(
                 <button key={p} onClick={()=>onAsk(p)} style={{ display:'flex', alignItems:'center', gap:10, textAlign:'left', padding:'12px 13px', border:`1px solid ${T.line}`, background:'#fff', borderRadius:13, cursor:'pointer' }}>

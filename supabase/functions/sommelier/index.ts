@@ -31,20 +31,29 @@ const SCHEMA = {
       properties: {
         grape: { type: "string", description: "Human-friendly grape/style, never a producer" },
         why: { type: "string", description: "2 sentences, plain language" },
-        deeperTitle: { type: "string", description: "Region + grape, e.g. 'Oregon Pinot Noir'" },
-        deeper: { type: "string", description: "2 sentences on the region and what to expect" },
+        deeperTitle: { type: "string", description: "The most specific level you can support: region or appellation plus grape, e.g. 'Northern Rhône Syrah — Crozes-Hermitage or Saint-Joseph'" },
+        deeper: { type: "string", description: "2 sentences on that region and what to expect from it" },
+        lookFor: { type: "array", items: { type: "string" }, description: "2-3 PRACTICAL clues for finding this in a shop or on a list: label terms, appellation names, body, sweetness, tannin, oak or alcohol level. Concrete and findable, e.g. 'German Riesling marked Kabinett — gently off-dry' or 'Alcohol at or below 11%'. Never a producer or a specific bottle." },
         matchGrapes: { type: "array", items: { type: "string" }, description: "Primary grape plus closely related grapes" },
       },
-      required: ["grape", "why", "deeperTitle", "deeper", "matchGrapes"],
+      required: ["grape", "why", "deeperTitle", "deeper", "lookFor", "matchGrapes"],
+    },
+    avoidNote: {
+      type: "string",
+      description: "For kind=pairing ONLY, and ONLY when a MEANINGFUL conflict exists: one sentence on what to avoid and why. Empty string when there is no real conflict — do not manufacture one.",
     },
     others: {
       type: "array",
-      description: "For kind=pairing ONLY: exactly two alternative styles.",
+      description: "For kind=pairing ONLY: one or two alternatives, each offering a genuinely DIFFERENT direction. Two only when the second adds something the first does not.",
       items: {
         type: "object",
         additionalProperties: false,
-        properties: { grape: { type: "string" }, why: { type: "string" } },
-        required: ["grape", "why"],
+        properties: {
+          direction: { type: "string", description: "2-3 words for how this CHANGES the experience, e.g. 'Bolder and firmer', 'Softer and rounder', 'Fresher, whiter'" },
+          grape: { type: "string" },
+          why: { type: "string", description: "One sentence: what this swaps in and what it gives up" },
+        },
+        required: ["direction", "grape", "why"],
       },
     },
   },
@@ -61,7 +70,7 @@ function json(body: unknown, status = 200): Response {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
-  if (!ANTHROPIC_API_KEY) return json({ error: "Wine Memory AI is not configured." }, 503);
+  if (!ANTHROPIC_API_KEY) return json({ error: "Sommelier is not configured." }, 503);
 
   const g = await gate(req, "sommelier");
   if (!g.ok) return json({ error: g.error, blocked: true }, g.status);
@@ -74,7 +83,7 @@ Deno.serve(async (req) => {
     const owned = Array.isArray(body.owned) ? body.owned.slice(0, 80) : [];
 
     const prompt =
-      `You are Wine Memory AI, a warm, knowledgeable wine guide inside someone's personal wine app. You are not a human sommelier and must never describe yourself as one. Classify their question and respond.\n\n` +
+      `You are the sommelier inside someone's personal wine app — warm, expert, and a good teacher. Classify their question and respond.\n\n` +
       // Phase 1 of the trust standard: uncertainty changes the ANSWER, not just a
       // label under it. This app has no catalogue, price, availability or critic
       // retrieval, so anything bottle-specific could only come from model memory.
@@ -84,12 +93,23 @@ Deno.serve(async (req) => {
       `- Never say that a critic, publication or merchant recommends something.\n` +
       `- Asked something like "best Pinot Noir under $25", answer with the styles and regions that deliver value at that level and how to recognise them, never with invented bottles or prices.\n` +
       `- Naming a producer is fine when the user asked you to EXPLAIN one, or as an illustration of a region's style. The rule is about telling someone to buy a particular bottle.\n` +
-      `Stay warm and concise while doing this. A style-level answer should feel like useful advice, not like a refusal.\n\n` +
-      `If it is a FOOD PAIRING question (what wine to drink with a specific dish, food, meal, or occasion), set kind="pairing" and fill: ` +
-      `dish (short name); primary{ grape (a human-friendly grape/STYLE, never a producer name), why (2 plain-language sentences), ` +
-      `deeperTitle (Region + grape, e.g. "Oregon Pinot Noir"), deeper (2 sentences on the region and what to expect), ` +
-      `matchGrapes (the primary grape plus closely related grapes) }; and others (EXACTLY two alternative styles, each with a one-sentence why). ` +
-      `STRONGLY PREFER a style the user already owns if it genuinely fits the dish. Leave text empty.\n\n` +
+      `Stay warm and concise while doing this. A style-level answer should feel like useful advice, not like a refusal. Trust comes from being accurate and explaining your reasoning, not from hedging.\n\n` +
+      `If it is a FOOD PAIRING question (what wine to drink with a specific dish, food, meal, or occasion), set kind="pairing".\n` +
+      // A pairing answer is incomplete if it stops at abstract characteristics.
+      // "Structured, savoury, high-acid" is not something anyone can buy.
+      `A PAIRING ANSWER IS INCOMPLETE IF IT ONLY DESCRIBES ABSTRACT CHARACTERISTICS. Words like "structured", "savoury" or "high-acid" describe a wine; they do not help someone standing in a shop. Every answer must translate them into a recognisable choice.\n` +
+      `Go to the MOST SPECIFIC level the evidence supports, and no further:\n` +
+      `  pairing principle -> needed characteristics -> grape or blend -> region or appellation -> a verified bottle.\n` +
+      `You have no research layer, so you stop at region or appellation. Never the last step.\n\n` +
+      `Fill: dish (short name); primary{ grape (the best choice: a grape, blend or established style, never a producer), ` +
+      `why (2 plain-language sentences connecting the wine's characteristics to the DISH — its weight, sauce, acidity, sweetness, salt, fat, spice and umami, whichever actually apply), ` +
+      `deeperTitle (the region or appellation level, e.g. "Northern Rhône Syrah — Crozes-Hermitage or Saint-Joseph"), deeper (2 sentences on that region), ` +
+      `lookFor (2-3 practical shop clues: label terms, appellation names, body, sweetness, tannin, oak, alcohol level), ` +
+      `matchGrapes (the primary grape plus closely related grapes) }; ` +
+      `others (ONE or TWO alternatives, each with a direction saying how it CHANGES the experience, and a one-sentence why — two only when the second is genuinely a different direction); ` +
+      `and avoidNote (one sentence, ONLY when a meaningful conflict exists — empty string otherwise, never manufactured).\n` +
+      `Rank the strongest option first. Do not list every possible grape or region. Keep it concise.\n` +
+      `STRONGLY PREFER a style the user already owns if it genuinely fits the dish — "genuinely" is the operative word. Leave text empty.\n\n` +
       `For ANY OTHER question — explainers ("Explain Beaujolais"), comparisons ("Barolo vs Barbaresco"), self-reflection ("Why do I like Nebbiolo?"), ` +
       `shopping/what-to-buy, or general wine knowledge — set kind="answer" and write a friendly, concise reply in text: 2-4 short sentences, ` +
       `OR up to 4 short lines each starting with "- " for lists/comparisons. No preamble, no markdown headers. Leave dish/primary/others empty.\n\n` +
