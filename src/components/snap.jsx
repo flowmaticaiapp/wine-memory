@@ -103,8 +103,8 @@ function SnapLabel({ onClose, onSave, onSearchInstead, verdictVariant='expressiv
 
   // ── CONFIRM ──
   const tc = typeColor(f.type);
-  const status = (f.found && f.confidence==='high') ? { bg:T.buyBg, fg:T.buy, icon:'sparkle', label:'AI IDENTIFIED — CONFIRM' }
-    : (f.found && f.confidence==='medium') ? { bg:T.maybeBg, fg:T.maybe, icon:'sparkle', label:'LIKELY MATCH — CHECK DETAILS' }
+  const status = (f.found && f.confidence==='high') ? { bg:T.buyBg, fg:T.buy, icon:'sparkle', label:'AI SUGGESTION — CONFIRM DETAILS' }
+    : (f.found && f.confidence==='medium') ? { bg:T.maybeBg, fg:T.maybe, icon:'sparkle', label:'AI SUGGESTION — CHECK CAREFULLY' }
     : { bg:T.maybeBg, fg:T.maybe, icon:'edit', label: f.error ? 'COULDN’T READ — ADD DETAILS' : 'COULDN’T IDENTIFY — ADD DETAILS' };
   return (
     <Panel onClose={onClose} title="Confirm & save" onBack={()=>setStep('capture')} backLabel="Retake">

@@ -8,8 +8,10 @@ import { supabase } from './supabase.js';
 const WINE_COLS = 'id,producer,name,vintage,type,grape,region,country,loc,verdict,tags,note,where,source,price,photo,family,flavor,pairings,blurb,style,tastesLike:tastes_like,pairsWith:pairs_with,sample,added';
 
 // ── photos ──────────────────────────────────────────────────────────
-// Snap/Scan hand us a base64 data URL; upload it and return a public URL.
-// Anything else (already a URL, or null) passes through untouched.
+const STORAGE_PREFIX = 'storage:';
+
+// Snap/Scan hand us a base64 data URL. Store only the private object path in
+// the database; a short-lived signed URL is created when the wine is loaded.
 async function maybeUploadPhoto(userId, photo){
   if (!photo || !photo.startsWith('data:')) return photo || null;
   const blob = await (await fetch(photo)).blob();
@@ -17,7 +19,33 @@ async function maybeUploadPhoto(userId, photo){
   const { error } = await supabase.storage.from('bottle-photos')
     .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
   if (error) throw error;
-  return supabase.storage.from('bottle-photos').getPublicUrl(path).data.publicUrl;
+  return STORAGE_PREFIX + path;
+}
+
+// Support both new private-path records and old public URLs so the privacy
+// migration does not break photos already saved by users.
+function storagePath(photo){
+  if (!photo) return null;
+  if (photo.startsWith(STORAGE_PREFIX)) return photo.slice(STORAGE_PREFIX.length);
+  const marker = '/storage/v1/object/public/bottle-photos/';
+  const at = photo.indexOf(marker);
+  return at >= 0 ? decodeURIComponent(photo.slice(at + marker.length)) : null;
+}
+
+async function displayPhoto(photo){
+  const path = storagePath(photo);
+  if (!path) return photo || null;
+  const { data, error } = await supabase.storage.from('bottle-photos')
+    .createSignedUrl(path, 60 * 60 * 24);
+  if (error) {
+    console.error('Could not create private photo URL', error);
+    return null;
+  }
+  return data.signedUrl;
+}
+
+async function hydrateWine(wine){
+  return { ...wine, photo:await displayPhoto(wine.photo) };
 }
 
 // ── wines ───────────────────────────────────────────────────────────
@@ -36,21 +64,21 @@ function wineToRow(w, photo){
 export async function fetchWines(){
   const { data, error } = await supabase.from('wines').select(WINE_COLS).order('created_at', { ascending:false });
   if (error) throw error;
-  return data;
+  return Promise.all(data.map(hydrateWine));
 }
 
 export async function insertWine(userId, w){
   const photo = await maybeUploadPhoto(userId, w.photo);
   const { data, error } = await supabase.from('wines').insert(wineToRow(w, photo)).select(WINE_COLS).single();
   if (error) throw error;
-  return data;
+  return hydrateWine(data);
 }
 
 export async function insertWines(userId, arr){
   const rows = await Promise.all(arr.map(async w => wineToRow(w, await maybeUploadPhoto(userId, w.photo))));
   const { data, error } = await supabase.from('wines').insert(rows).select(WINE_COLS);
   if (error) throw error;
-  return data;
+  return Promise.all(data.map(hydrateWine));
 }
 
 export async function updateWine(id, patch){
@@ -60,10 +88,10 @@ export async function updateWine(id, patch){
 
 // Upload a (base64 data URL) photo and attach it to an existing wine.
 export async function setWinePhoto(userId, id, dataUrl){
-  const url = await maybeUploadPhoto(userId, dataUrl);
-  const { error } = await supabase.from('wines').update({ photo: url }).eq('id', id);
+  const stored = await maybeUploadPhoto(userId, dataUrl);
+  const { error } = await supabase.from('wines').update({ photo: stored }).eq('id', id);
   if (error) throw error;
-  return url;
+  return displayPhoto(stored);
 }
 
 export async function deleteSamples(){

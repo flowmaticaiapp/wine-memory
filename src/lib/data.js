@@ -165,13 +165,11 @@ const PAIRING_GROUPS = [
   { id:'board', label:'The cheese board',     match:['Aged cheese','Hard cheese','Goat cheese','Charcuterie'] },
   { id:'bird',  label:'Roast chicken',        match:['Roast chicken','Pork'] },
 ];
-// give a stable enrichment for newly-imported wines (so import auto-enriches)
+// Preserve only enrichment that came from an explicit source. Previously this
+// function assigned one of two random flavor profiles to new red wines. Those
+// invented values could then shape the user's palate portrait and pairings.
 function autoEnrich(w){
-  if (w.flavor) return w;
-  const fam = w.type==='White'||w.type==='Rosé'||w.type==='Rosé' ? 'bright' : (Math.random()<0.5?'juicy':'wild');
-  const base = { bold:{body:5,acidity:4,tannin:5,fruit:3,oak:2}, bright:{body:2,acidity:5,tannin:0,fruit:2,oak:1}, juicy:{body:3,acidity:3,tannin:2,fruit:5,oak:1}, wild:{body:3,acidity:4,tannin:2,fruit:3,oak:1} }[fam];
-  const pair = { bright:['Grilled fish','Salads','Goat cheese'], juicy:['Pizza','Burgers','Tomato pasta'], wild:['Roast chicken','Charcuterie','Mushrooms'] }[fam];
-  return Object.assign(w, { family:fam, flavor:base, pairings:pair });
+  return w;
 }
 
 // ── Real order parser — extracts wines from arbitrary pasted receipts ──

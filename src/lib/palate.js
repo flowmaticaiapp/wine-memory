@@ -51,7 +51,7 @@ const VWEIGHT = { buy:3, maybe:1, totry:0.5, no:-2 };
 // Group the cellar by region, with verdict tallies, affinity score, and a center.
 export function groupByRegion(wines){
   const m = {};
-  for (const w of wines){
+  for (const w of wines.filter(w=>!w.sample)){
     const r = resolveRegion(w);
     if (!m[r.key]) m[r.key] = { ...r, wines:[], buy:0, maybe:0, no:0, totry:0, score:0 };
     const g = m[r.key];
@@ -81,9 +81,10 @@ export function affinityLevel(score){
 // ── Taste signature: a phrase + fingerprint from your favorite wines ──
 const AX = ['body','acidity','tannin','fruit','oak'];
 export function tasteSignature(wines){
-  const buys = wines.filter(w=>w.verdict==='buy' && w.flavor);
-  const rated = wines.filter(w=>w.verdict!=='totry' && w.flavor);
-  const pool = buys.length>=2 ? buys : (rated.length ? rated : wines.filter(w=>w.flavor));
+  const personal = wines.filter(w=>!w.sample);
+  const buys = personal.filter(w=>w.verdict==='buy' && w.flavor);
+  const rated = personal.filter(w=>w.verdict!=='totry' && w.flavor);
+  const pool = buys.length>=2 ? buys : (rated.length ? rated : personal.filter(w=>w.flavor));
   if (!pool.length) return null;
 
   const axes = {}; AX.forEach(k=> axes[k] = pool.reduce((s,w)=>s+(w.flavor[k]||0),0)/pool.length);

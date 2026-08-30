@@ -21,7 +21,7 @@ create table if not exists public.wines (
   "where"    text,
   source     text,
   price      numeric,
-  photo      text,                          -- Storage URL, nullable (honest imagery)
+  photo      text,                          -- private Storage path, nullable
   family     text,
   flavor     jsonb,                          -- {body,acidity,tannin,fruit,oak}
   pairings   text[] default '{}',
@@ -90,19 +90,20 @@ grant select, insert, update, delete on public.pairings            to authentica
 grant select, insert, update, delete on public.dining_experiences  to authenticated;
 
 -- ── Storage: bottle photos ──────────────────────────────────────────
--- Public-read bucket (label photos aren't sensitive); writes scoped to the
--- user's own folder:  bottle-photos/{user_id}/{file}.jpg
+-- Private bucket; reads and writes are scoped to the user's own folder:
+-- bottle-photos/{user_id}/{file}.jpg
 insert into storage.buckets (id, name, public)
-values ('bottle-photos', 'bottle-photos', true)
-on conflict (id) do nothing;
+values ('bottle-photos', 'bottle-photos', false)
+on conflict (id) do update set public = false;
 
 drop policy if exists "photos public read"   on storage.objects;
+drop policy if exists "photos own read"       on storage.objects;
 drop policy if exists "photos own insert"     on storage.objects;
 drop policy if exists "photos own update"     on storage.objects;
 drop policy if exists "photos own delete"     on storage.objects;
 
-create policy "photos public read" on storage.objects for select
-  using (bucket_id = 'bottle-photos');
+create policy "photos own read" on storage.objects for select
+  using (bucket_id = 'bottle-photos' and (storage.foldername(name))[1] = auth.uid()::text);
 
 create policy "photos own insert" on storage.objects for insert
   with check (bucket_id = 'bottle-photos' and (storage.foldername(name))[1] = auth.uid()::text);

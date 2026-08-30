@@ -173,7 +173,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
       // Graceful offline fallback: pairing questions still get a useful answer.
       if (isPairingQuery(Q)){
         const out = heuristicPairing(Q);
-        setData({ mode:'pairing', ...out, owned:ownedMatches(out, wines) });
+        setData({ mode:'pairing', ...out, owned:ownedMatches(out, wines), offline:true });
         setPhase('pairing');
       } else {
         setData({ mode:'answer', text:'Sorry — I couldn’t reach the sommelier just now. Please try again in a moment.' });
@@ -247,6 +247,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
         </>}
 
         {phase==='pairing' && data && <>
+          {data.offline && <div style={{ marginBottom:14, padding:'10px 12px', borderRadius:10, background:T.maybeBg, color:T.maybe, fontSize:12.5, lineHeight:1.45 }}>The AI sommelier is unavailable. This is a general pairing rule, not a researched bottle recommendation.</div>}
           <div style={{ fontFamily:'var(--mono)', fontSize:11.5, color:T.ink3, letterSpacing:0.3, textTransform:'uppercase' }}>For {data.dish}</div>
           {/* Layer 1 — the style */}
           <div style={{ marginTop:8 }}>
