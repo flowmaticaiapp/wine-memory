@@ -199,7 +199,7 @@ function VApp({ session }){
       {overlay==='snap' && <SnapLabel onClose={()=>setOverlay(null)} onSave={addWine} onSearchInstead={()=>setOverlay('searchadd')} verdictVariant={t.verdictStyle}/>}
       {overlay==='searchadd' && <SearchAdd onClose={()=>setOverlay(null)} onSave={addWine} verdictVariant={t.verdictStyle}/>}
       {overlay==='import' && <OrderImport onClose={()=>setOverlay(null)} onAddMany={addMany} onViewToTry={viewToTry}/>}
-      {overlay==='search' && <PairingSearch wines={wines} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
+      {overlay==='search' && <PairingSearch wines={wines} userId={userId} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
       {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining} recent={dining}/>}
       {overlay==='pour' && <LearnReader onClose={()=>setOverlay(null)} onExplore={()=>{ setOverlay(null); setTab('learn'); }}/>}
       {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} onAddPhoto={addPhoto} verdictVariant={t.verdictStyle}/>}

@@ -11,7 +11,9 @@ import { BottlePhoto, typeHue } from './bottle.jsx';
 import { Spinner } from './add.jsx';
 import { V_STATUS } from '../lib/constants.js';
 import { personalWines } from '../lib/palate.js';
-import { DISH_RULES, DEFAULT_RULE, priceLimit, isPairingQuery, heuristicPairing } from '../lib/pairingrules.js';
+import { DISH_RULES, DEFAULT_RULE, priceLimit, isPairingQuery, heuristicPairing, pairingHeadline } from '../lib/pairingrules.js';
+import { textMatchesAnyGrape } from '../lib/grapes.js';
+import { readLastAnswer, writeLastAnswer } from '../lib/lastanswer.js';
 import { supabase } from '../lib/supabase.js';
 import { invokeAI } from '../lib/ai.js';
 import { track } from '../lib/analytics.js';
@@ -30,11 +32,6 @@ const EXAMPLES = [
 // Pairing guidance lives in lib/pairingrules.js as reviewed, versioned data.
 // Re-exported here so existing importers of this module keep working.
 
-// The last answer survives a locked phone or a dead spot between the shop door
-// and the shelf. Kept short — a pairing is for tonight, not next week.
-const LAST_ANSWER_KEY = 'wm_last_pairing';
-const LAST_ANSWER_TTL = 1000 * 60 * 60 * 12;
-
 // One-detail refinements. Each appends a qualifier to the question already
 // asked rather than starting over, so the original stays visible and the user
 // does not retype anything in a shop aisle.
@@ -45,22 +42,6 @@ const REFINEMENTS = [
   ['Less oaky', 'with little or no oak'],
   ['A bit sweeter', 'slightly sweeter'],
 ];
-
-// Module scope on purpose: these touch Date.now() and localStorage, which the
-// react-hooks lint rules (rightly) will not allow inside a component body.
-function readLastAnswer(){
-  try {
-    const raw = localStorage.getItem(LAST_ANSWER_KEY);
-    if (!raw) return null;
-    const saved = JSON.parse(raw);
-    if (!saved || !saved.data || (Date.now()-saved.at) > LAST_ANSWER_TTL) return null;
-    return saved;
-  } catch { return null; }
-}
-function writeLastAnswer(question, data){
-  try { localStorage.setItem(LAST_ANSWER_KEY, JSON.stringify({ at:Date.now(), asked:question, data })); }
-  catch { /* storage full or blocked — the answer still shows */ }
-}
 
 // Build the personalization payload the sommelier function expects.
 // Samples excluded: this payload is sent to the model AS the user's own taste,
@@ -81,21 +62,12 @@ async function askSommelier(query, wines){
 }
 
 // "From your cellar" must only offer a bottle that GENUINELY fits.
-//
-// The previous version reduced each grape to its first lowercased word and did a
-// substring test, so "Pinot Noir" became "pinot" and matched a Pinot Grigio —
-// a white — under a grilled-steak pairing. "Cabernet" likewise swallowed
-// Cabernet Franc. Matching is now on whole words against the wine's own grape
-// field first, falling back to the name only when no grape is recorded.
-const wordsOf = (s)=> String(s||'').toLowerCase().split(/[^a-zà-ÿ]+/).filter(Boolean);
+// Matching uses canonical grape identities (src/lib/grapes.js): Cabernet
+// Sauvignon and Cabernet Franc are distinct, as are Pinot Noir and Pinot
+// Grigio, while Pinot Grigio and Pinot Gris are one grape under two names.
+// The wine's own grape field is preferred; its name is the fallback.
 function grapeFits(wine, targets){
-  const hay = new Set(wordsOf(wine.grape || wine.name));
-  return targets.some(t=>{
-    const need = wordsOf(t);
-    // Every word of the target grape must be present: "pinot noir" needs both,
-    // so a Pinot Grigio no longer qualifies.
-    return need.length>0 && need.every(w=>hay.has(w));
-  });
+  return textMatchesAnyGrape(wine.grape || wine.name, targets);
 }
 function ownedMatches(result, wines){
   const targets = [ ...(result.primary.matchGrapes||[result.primary.grape]), ...((result.others||[]).map(o=>o.grape)) ].filter(Boolean);
@@ -195,7 +167,7 @@ function AnswerText({ text }){
       </div> ); })}
   </div>;
 }
-function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
+function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePairing }){
   const [q, setQ] = pUS('');
   const [phase, setPhase] = pUS('idle');   // idle | thinking | pairing | search
   const [data, setData] = pUS(null);
@@ -209,7 +181,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
   // the recommendation they came in with.
   pUE(()=>{
     if (didInit.current || initialQuery) return;
-    const saved = readLastAnswer();
+    const saved = readLastAnswer(userId);
     if (!saved) return;
     // Re-match the cellar rather than trusting the stored copy: bottles may
     // have been added, drunk or re-rated since.
@@ -219,7 +191,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
     setPhase(d.mode==='pairing' ? 'pairing' : 'answer');
   }, []);
 
-  const remember = (d, question)=> writeLastAnswer(question, d);
+  const remember = (d, question)=> writeLastAnswer(userId, question, d);
 
   const run = async (query)=>{
     const Q = (query!=null?query:q).trim(); if(!Q) return;
@@ -331,6 +303,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
               Recommendation before explanation. Everything a hurried shopper
               needs to locate a bottle sits above this fold; depth is behind
               "Why this?". */}
+          {pairingHeadline(data) && <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.maybe, letterSpacing:'.13em', textTransform:'uppercase', marginBottom:10 }}>{pairingHeadline(data)}</div>}
           <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.ink3, letterSpacing:'.14em', textTransform:'uppercase' }}>Look for</div>
           <div style={{ fontSize:30, fontWeight:790, letterSpacing:-0.9, color:T.ink, lineHeight:1.05, marginTop:4 }}>{data.primary.grape}</div>
 

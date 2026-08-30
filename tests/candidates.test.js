@@ -14,7 +14,11 @@ import assert from 'node:assert/strict';
 import {
   fromCellar, fromStyleGuidance, fromStoreInventory,
   rankCandidates, scoreCandidate, matchesGrape, applyRequirements,
+  quarantinedStoreItems, STORE_STALE_MS,
 } from '../src/lib/candidates.js';
+
+const FRESH = new Date(Date.now() - 60 * 60 * 1000).toISOString();   // an hour ago
+const STALE = new Date(Date.now() - STORE_STALE_MS - 60 * 60 * 1000).toISOString();
 
 // One request, used throughout: a steak pairing wanting Syrah or Malbec.
 const REQUEST = {
@@ -38,13 +42,13 @@ const STYLE_RESULT = {
 const STORE_ITEMS = [
   { merchantId:'green-hills', sku:'GH-1001', catalogWineId:'lwin-000001', producer:'Producer X',
     name:'Côtes du Rhône', vintage:2022, grape:'Syrah', region:'Rhône', country:'France', type:'Red',
-    price:24, status:'in-stock', location:'Rhône section · Shelf 3', updatedAt:'2026-08-30T09:00:00Z' },
+    price:24, status:'in-stock', location:'Rhône section · Shelf 3', updatedAt:FRESH },
   { merchantId:'green-hills', sku:'GH-1002', catalogWineId:'lwin-000002', producer:'Producer Y',
     name:'Rioja Crianza', vintage:2020, grape:'Tempranillo', region:'Rioja', country:'Spain', type:'Red',
-    price:27, status:'in-stock', location:'Spain · Shelf 1', updatedAt:'2026-08-30T09:00:00Z' },
+    price:27, status:'in-stock', location:'Spain · Shelf 1', updatedAt:FRESH },
   { merchantId:'green-hills', sku:'GH-1003', catalogWineId:'lwin-000003', producer:'Producer Z',
     name:'Malbec', vintage:2021, grape:'Malbec', region:'Mendoza', country:'Argentina', type:'Red',
-    price:19, status:'out-of-stock', location:'Argentina · Shelf 2', updatedAt:'2026-08-30T09:00:00Z' },
+    price:19, status:'out-of-stock', location:'Argentina · Shelf 2', updatedAt:FRESH },
 ];
 
 // ── The same request ranks all three sources ────────────────────────
@@ -166,4 +170,88 @@ test('an unmatched store item is not silently attached to a catalog wine', () =>
   const unmatched = fromStoreInventory([{ ...STORE_ITEMS[0], catalogWineId: undefined }])[0];
   assert.equal(unmatched.catalogWineId, null, 'no catalog id should be invented');
   assert.equal(unmatched.provenance, 'ai', 'an unmatched item is not a sourced fact');
+});
+
+// ── Quarantine and store hard requirements ──────────────────────────
+// A named store-bottle result is a claim that the customer can walk over and
+// buy this bottle right now. These tests hold that claim to its requirements.
+
+test('an unmatched store item can never appear in ranked recommendations', () => {
+  // A perfect fit — right grape, in stock, fresh, cheap — but no verified
+  // catalogue match. It must be quarantined, not ranked.
+  const perfectButUnmatched = { ...STORE_ITEMS[0], sku:'GH-9999', catalogWineId: undefined };
+  const candidates = fromStoreInventory([perfectButUnmatched, STORE_ITEMS[0]]);
+  const ranked = rankCandidates(REQUEST, candidates);
+  assert.ok(!ranked.some(c => c.id === 'GH-9999'),
+    'an unmatched bottle surfaced as a customer-facing recommendation');
+  assert.equal(ranked.length, 1, 'the matched twin still ranks');
+
+  const queue = quarantinedStoreItems(candidates);
+  assert.equal(queue.length, 1, 'the unmatched item lands in the review queue');
+  assert.equal(queue[0].id, 'GH-9999');
+  assert.equal(queue[0].catalogWineId, null, 'and is never attached to a guessed wine');
+});
+
+test('customer-facing inventory defaults to in-stock only', () => {
+  // No inStockOnly flag on the request — the default must already exclude
+  // out-of-stock and unknown-status inventory. Low-stock still counts as
+  // buyable.
+  const items = [
+    STORE_ITEMS[0],                                             // in-stock Syrah
+    { ...STORE_ITEMS[2], status:'out-of-stock' },               // out-of-stock Malbec
+    { ...STORE_ITEMS[2], sku:'GH-1004', status:'unknown' },     // unknown Malbec
+    { ...STORE_ITEMS[2], sku:'GH-1005', status:'low-stock' },   // low-stock Malbec
+  ];
+  const ranked = rankCandidates(REQUEST, fromStoreInventory(items));
+  const skus = ranked.map(c => c.id);
+  assert.ok(skus.includes('GH-1001'), 'in-stock ranks');
+  assert.ok(skus.includes('GH-1005'), 'low-stock still counts as buyable');
+  assert.ok(!skus.includes('GH-1003'), 'out-of-stock cannot be recommended as purchasable');
+  assert.ok(!skus.includes('GH-1004'), 'unknown status cannot be recommended as purchasable');
+});
+
+test('stale or unstamped inventory cannot be recommended as purchasable', () => {
+  const items = [
+    STORE_ITEMS[0],                                             // fresh
+    { ...STORE_ITEMS[0], sku:'GH-2001', updatedAt: STALE },     // stale
+    { ...STORE_ITEMS[0], sku:'GH-2002', updatedAt: undefined }, // never stamped
+  ];
+  const ranked = rankCandidates(REQUEST, fromStoreInventory(items));
+  assert.deepEqual(ranked.map(c => c.id), ['GH-1001'],
+    'only freshly confirmed inventory may be presented as buyable');
+});
+
+test('a hard budget excludes store bottles with unknown prices', () => {
+  const items = [
+    STORE_ITEMS[0],                                                   // $24
+    { ...STORE_ITEMS[0], sku:'GH-3001', price: undefined },           // price unknown
+  ];
+  const ranked = rankCandidates({ ...REQUEST, maxPrice: 30 }, fromStoreInventory(items));
+  assert.deepEqual(ranked.map(c => c.id), ['GH-1001'],
+    'an unknown price cannot satisfy a hard maximum');
+});
+
+test('style guidance remains when no verified bottle qualifies', () => {
+  // Every store item disqualified — stale, out of stock, unmatched — yet the
+  // customer still gets a useful style-level answer.
+  const deadInventory = fromStoreInventory([
+    { ...STORE_ITEMS[0], updatedAt: STALE },
+    { ...STORE_ITEMS[2] },                                        // out-of-stock
+    { ...STORE_ITEMS[0], sku:'GH-4001', catalogWineId: undefined },
+  ]);
+  const ranked = rankCandidates(REQUEST, [...deadInventory, ...fromStyleGuidance(STYLE_RESULT)]);
+  assert.ok(ranked.length > 0, 'the answer must not go empty');
+  assert.ok(ranked.every(c => c.source === 'style'), 'only style guidance survives');
+});
+
+test('canonical grape identities hold inside the ranker', () => {
+  // A Cabernet Franc in the cellar must not ride a Cabernet Sauvignon target.
+  const cellar = fromCellar([
+    { id:'cf', producer:'Loire Estate', name:'Chinon', vintage:2021, grape:'Cabernet Franc', type:'Red', price:20, verdict:'buy' },
+    { id:'cs', producer:'Napa Estate', name:'Estate Red', vintage:2019, grape:'Cabernet', type:'Red', price:35, verdict:'buy' },
+  ]);
+  const ranked = rankCandidates(REQUEST, cellar);
+  const ids = ranked.map(c => c.id);
+  assert.ok(!ids.includes('cf'), 'Cabernet Franc must not match a Cabernet Sauvignon target');
+  assert.ok(ids.includes('cs'), 'a bare-Cabernet label conventionally means Cabernet Sauvignon');
 });

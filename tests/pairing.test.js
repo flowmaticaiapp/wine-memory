@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DISH_RULES, DEFAULT_RULE, heuristicPairing, priceLimit, isPairingQuery } from '../src/lib/pairingrules.js';
+import { DISH_RULES, DEFAULT_RULE, heuristicPairing, priceLimit, isPairingQuery, pairingHeadline } from '../src/lib/pairingrules.js';
 
 // ── An unmatched dish must not pretend it was understood ────────────
 
@@ -114,4 +114,90 @@ test('look-for clues never name a specific purchasable bottle', () => {
       assert.ok(!/\b(19|20)\d{2}\b/.test(clue), `${rule.id}: a clue names a vintage`);
     }
   }
+});
+
+// ── Compound dishes ─────────────────────────────────────────────────
+// A sauce or preparation can change the pairing more than the protein does.
+// Each result must explain BOTH major elements of the dish.
+
+test('steak with mushroom sauce reaches the compound rule, not plain steak', () => {
+  const r = heuristicPairing('what should I drink with steak with mushroom sauce?');
+  assert.equal(r.ruleId, 'steak-mushroom');
+  assert.equal(r.primary.grape, 'Syrah');
+  assert.match(r.primary.deeperTitle, /Crozes-Hermitage|Saint-Joseph/);
+  // The explanation must speak to both elements: body for the steak, savoury
+  // character for the mushrooms, and fruit against the umami.
+  assert.match(r.primary.why, /steak|beef/i);
+  assert.match(r.primary.why, /mushroom/i);
+  assert.match(r.primary.why, /umami|earth|savoury|savory/i);
+});
+
+test('mushroom sauce before the steak still reaches the compound rule', () => {
+  const r = heuristicPairing('mushroom sauce over a grilled ribeye');
+  assert.equal(r.ruleId, 'steak-mushroom');
+});
+
+test('plain steak still reaches the plain steak rule', () => {
+  const r = heuristicPairing('grilled ribeye steak');
+  assert.equal(r.ruleId, 'grilled-red-meat');
+});
+
+test('steak with chimichurri favours the fresher Malbec style', () => {
+  const r = heuristicPairing('steak with chimichurri');
+  assert.equal(r.ruleId, 'steak-chimichurri');
+  assert.equal(r.primary.grape, 'Malbec');
+  assert.match(r.primary.why, /beef|steak|grill/i);
+  assert.match(r.primary.why, /chimichurri|herb/i);
+});
+
+test('chicken with cream sauce goes to Chardonnay, not shellfish or plain poultry', () => {
+  const r = heuristicPairing('chicken with cream sauce');
+  assert.equal(r.ruleId, 'chicken-cream');
+  assert.equal(r.primary.grape, 'Chardonnay');
+  assert.match(r.primary.why, /chicken|bird/i);
+  assert.match(r.primary.why, /cream/i);
+});
+
+test('creamy shellfish still reaches its own rule', () => {
+  const r = heuristicPairing('creamy shellfish pasta');
+  assert.equal(r.ruleId, 'cream-shellfish');
+});
+
+test('spicy tomato pasta balances both elements with Barbera', () => {
+  const r = heuristicPairing('spicy tomato pasta');
+  assert.equal(r.ruleId, 'spicy-tomato');
+  assert.equal(r.primary.grape, 'Barbera');
+  assert.match(r.primary.why, /tomato/i);
+  assert.match(r.primary.why, /chilli|chili|heat|spice/i);
+});
+
+test('plain spicy food and plain tomato pasta keep their own rules', () => {
+  assert.equal(heuristicPairing('spicy thai curry').ruleId, 'spicy-heat');
+  assert.equal(heuristicPairing('what goes with pizza?').ruleId, 'tomato-red-sauce');
+});
+
+// ── The warning survives when the AI is unavailable ─────────────────
+
+test('heuristicPairing carries avoidNote through to the screen', () => {
+  // The fallback path is exactly when a warning matters most — the AI is not
+  // there to phrase it. A rule with a meaningful conflict must deliver it.
+  const r = heuristicPairing('spicy thai curry');
+  assert.ok(r.avoidNote && r.avoidNote.length > 10, 'the spicy rule has a real warning and it must travel');
+  // And a rule without a conflict passes an empty note, never undefined.
+  const calm = heuristicPairing('grilled ribeye steak');
+  assert.equal(calm.avoidNote, '');
+});
+
+// ── Unmatched-dish uncertainty is visible ───────────────────────────
+
+test('an unrecognised dish presents as a versatile starting point', () => {
+  const unknown = heuristicPairing('my grandmother’s pierogi casserole');
+  assert.equal(unknown.matched, false);
+  assert.equal(pairingHeadline(unknown), 'A versatile starting point');
+
+  const known = heuristicPairing('what goes with pizza?');
+  assert.equal(pairingHeadline(known), 'For pizza & red sauce');
+
+  // AI results carry no matched flag; they keep the dish headline.
+  assert.equal(pairingHeadline({ dish:'grilled salmon' }), 'For grilled salmon');
 });
