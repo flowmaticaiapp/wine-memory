@@ -131,7 +131,7 @@ function PalateScreen({ wines, pairings, onOpenWine, onAsk }){
         {next.length>0 && <>
           <div style={{ display:'flex', alignItems:'center', gap:6, margin:'24px 0 11px' }}>
             <Icon name="sparkle" size={14} color={T.maybe}/>
-            <span style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.4, textTransform:'uppercase' }}>Explore next · from your sommelier</span>
+            <span style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.4, textTransform:'uppercase' }}>Explore next · from Wine Memory AI</span>
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
             {next.map((c,i)=>(
@@ -170,7 +170,7 @@ function PalateScreen({ wines, pairings, onOpenWine, onAsk }){
                 {w && <VerdictBadge id={w.verdict} variant="glyph" size="sm"/>}
               </button> ); })}
           </div> : <div style={{ padding:'18px 16px', border:`1px dashed ${T.line2}`, borderRadius:13, background:T.canvas }}>
-            <div style={{ fontSize:13.5, color:T.ink2, lineHeight:1.5 }}>Ask the sommelier what to drink, then tap <b style={{ color:T.ink }}>Save this pairing</b> — they collect here.</div>
+            <div style={{ fontSize:13.5, color:T.ink2, lineHeight:1.5 }}>Ask Wine Memory AI what to drink, then tap <b style={{ color:T.ink }}>Save this pairing</b> — they collect here.</div>
             <button onClick={()=>onAsk('')} style={{ marginTop:12, padding:'10px 15px', borderRadius:11, border:'none', background:T.ink, color:'#fff', fontFamily:'var(--sans)', fontSize:13.5, fontWeight:650, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:7 }}><Icon name="fork" size={16} color="#fff"/> Pair a meal</button>
           </div>}
         </div>

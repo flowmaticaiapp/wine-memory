@@ -45,7 +45,7 @@ function FirstSuccess({ wine, onAsk, onAddAnother }){
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
         <button onClick={()=>{ track('first_success_ask'); onAsk(seed); }} style={{ height:52, borderRadius:13, border:'none', cursor:'pointer', background:T.ink, color:'#fff',
           fontFamily:'var(--sans)', fontSize:15, fontWeight:680, display:'flex', alignItems:'center', justifyContent:'center', gap:9 }}>
-          <Icon name="sparkle" size={18} color="#fff"/> Ask your sommelier about this wine</button>
+          <Icon name="sparkle" size={18} color="#fff"/> Ask Wine Memory AI about this wine</button>
         <button onClick={()=>{ track('first_success_add_another'); onAddAnother(); }} style={{ background:'none', border:'none', cursor:'pointer', color:T.ink2, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:600, padding:6 }}>Add another</button>
       </div>
     </div>

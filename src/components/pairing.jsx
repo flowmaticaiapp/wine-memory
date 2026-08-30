@@ -11,6 +11,7 @@ import { BottlePhoto, typeHue } from './bottle.jsx';
 import { Spinner } from './add.jsx';
 import { V_STATUS } from '../lib/constants.js';
 import { personalWines } from '../lib/palate.js';
+import { DISH_RULES, DEFAULT_RULE, priceLimit, isPairingQuery, heuristicPairing } from '../lib/pairingrules.js';
 import { supabase } from '../lib/supabase.js';
 import { invokeAI } from '../lib/ai.js';
 import { track } from '../lib/analytics.js';
@@ -26,59 +27,8 @@ const EXAMPLES = [
   'What should I bring to a dinner party?',
 ];
 
-// ── teaching rules (offline + structure the AI mirrors) ──
-const DISH_RULES = [
-  { re:/pesto|basil|herb|chimichurri.*(?!steak)/i, dish:'pesto pasta',
-    primary:{ grape:'Pinot Noir', why:'A great lighter-bodied red — its bright acidity complements basil and garlic, and it sits more gracefully with pasta than a heavy red would.', deeperTitle:'Oregon Pinot Noir', deeper:'Focus on the Willamette Valley, Oregon. Those Pinots show vibrant cherry fruit, freshness, and a little earthiness that pair beautifully with herb-driven dishes.', matchGrapes:['Pinot Noir'] },
-    others:[ {grape:'Vermentino', why:'Citrusy and herbal — a natural match for pesto.'}, {grape:'Sauvignon Blanc', why:'High acidity and green, herbal notes mirror the basil.'} ], avoid:['Cabernet','Malbec','Zinfandel','Syrah'] },
-
-  { re:/cream|shellfish|scallop|lobster|crab|prawn|shrimp|clam|alfredo/i, dish:'creamy shellfish',
-    primary:{ grape:'Pinot Noir', why:'Light-bodied with enough acidity to cut the cream, and soft tannins that won’t bully delicate shellfish.', deeperTitle:'Burgundy or Oregon Pinot Noir', deeper:'Look to red Burgundy or the Willamette Valley — silky, high-acid, low-oak styles that flatter cream sauces without overpowering the seafood.', matchGrapes:['Pinot Noir'] },
-    others:[ {grape:'Unoaked Chardonnay', why:'Chablis-style whites bring acidity and minerality without heavy oak.'}, {grape:'Champagne', why:'Bubbles and acidity refresh the palate between rich bites.'} ], avoid:['Cabernet','Malbec','Zinfandel','Syrah','Nebbiolo'] },
-
-  { re:/vegetable|veggie|\bgarden\b|ratatouille|eggplant|aubergine|zucchini|courgette|asparagus|\bsalad\b|roasted veg|grilled veg/i, dish:'garden vegetables',
-    primary:{ grape:'Gamay', why:'Garden vegetables are fresh, green and delicate, so they want a light, high-acid wine that lifts the produce rather than burying it.', deeperTitle:'Beaujolais Gamay', deeper:'Beaujolais (Gamay) is bright, floral and low in tannin — it flatters herbs and seasonal vegetables. A crisp Sauvignon Blanc or dry rosé works just as well.', matchGrapes:['Gamay','Pinot Noir','Frappato','Sauvignon Blanc'] },
-    others:[ {grape:'Sauvignon Blanc', why:'Green, herbal notes mirror fresh garden vegetables.'}, {grape:'Dry Rosé', why:'Fresh and versatile with herbs and seasonal produce.'} ], avoid:['Cabernet','Malbec','Zinfandel','Nebbiolo'] },
-
-  { re:/ribeye|steak|\bbeef\b|braise|short rib|lamb|brisket|grilled meat/i, dish:'grilled red meat',
-    primary:{ grape:'Malbec', why:'Bold, dark-fruited and structured — firm tannins grip the fat and char of grilled red meat.', deeperTitle:'Mendoza Malbec', deeper:'Argentine Malbec from Mendoza delivers plush black fruit and velvety tannin built for steak; Patagonia versions add a little freshness for herby sauces like chimichurri.', matchGrapes:['Malbec','Cabernet','Syrah','Nebbiolo'] },
-    others:[ {grape:'Cabernet Sauvignon', why:'The steakhouse classic — cassis and grippy tannin.'}, {grape:'Syrah', why:'Peppery and savory, great with a charred, herby crust.'} ], avoid:[] },
-
-  { re:/roast chicken|\bchicken\b|turkey|\bpork\b|poultry/i, dish:'roast chicken',
-    primary:{ grape:'Pinot Noir', why:'Light, savory and bright — it flatters roast poultry without steamrolling it.', deeperTitle:'Beaujolais Gamay', deeper:'For joy and value, look to Beaujolais (the grape is Gamay): juicy, floral, low-tannin reds that are endlessly friendly with roast chicken.', matchGrapes:['Pinot Noir','Gamay'] },
-    others:[ {grape:'Chardonnay', why:'A rounder white echoes roasted, buttery skin.'}, {grape:'Gamay', why:'Bright and low-tannin — wonderfully food-friendly.'} ], avoid:['Cabernet'] },
-
-  { re:/spicy|thai|curry|szechuan|sichuan|korean|gochujang|chili|chilli|indian/i, dish:'spicy food',
-    primary:{ grape:'Riesling', why:'A touch of sweetness and racy acidity tame chili heat while lifting aromatic spice.', deeperTitle:'Off-dry Mosel Riesling', deeper:'German Mosel Riesling (look for “Kabinett”) balances gentle sweetness with bright acidity — ideal for Thai and Sichuan heat.', matchGrapes:['Riesling','Chenin','Gew'] },
-    others:[ {grape:'Gewürztraminer', why:'Floral and slightly sweet — a curry classic.'}, {grape:'Grüner Veltliner', why:'Peppery and crisp; handles spice and herbs.'} ], avoid:['Cabernet','Malbec','Nebbiolo','Zinfandel'] },
-
-  { re:/mushroom|truffle|umami|porcini|risotto/i, dish:'mushroom pasta',
-    primary:{ grape:'Pinot Noir', why:'Earthy and savory — it echoes umami mushroom flavors instead of fighting them.', deeperTitle:'Burgundy or Barolo', deeper:'Red Burgundy (Pinot Noir) or Nebbiolo from Barolo/Barbaresco bring forest-floor and truffle notes that sing with mushrooms.', matchGrapes:['Pinot Noir','Nebbiolo','Gamay'] },
-    others:[ {grape:'Nebbiolo', why:'Tar, rose and dried herbs — magic with mushrooms.'}, {grape:'Gamay', why:'Lighter, earthy and bright.'} ], avoid:['Zinfandel'] },
-
-  { re:/pizza|marinara|tomato|red sauce|lasagna|bolognese|\bpasta\b/i, dish:'pizza & red sauce',
-    primary:{ grape:'Sangiovese', why:'High acidity matches the tomato’s tang and savory herbs, with enough grip for cheese and cured meats.', deeperTitle:'Chianti (Tuscany)', deeper:'Tuscan Sangiovese — Chianti Classico — is the classic red-sauce wine: tart cherry, herbs and mouth-watering acidity.', matchGrapes:['Sangiovese','Nero','Frappato','Barbera','Montepulciano','Gamay'] },
-    others:[ {grape:'Barbera', why:'Juicy, low-tannin and high-acid — pizza’s best friend.'}, {grape:'Frappato', why:'Light, floral Sicilian red; chill it slightly.'} ], avoid:[] },
-
-  { re:/oyster|sushi|raw fish|ceviche|crudo|white fish|sole|branzino|seafood|fish/i, dish:'seafood',
-    primary:{ grape:'Sauvignon Blanc', why:'Crisp, zesty and mineral — it lifts delicate seafood without weighing it down.', deeperTitle:'Loire Sauvignon Blanc', deeper:'Sancerre and Pouilly-Fumé from the Loire are flinty, citrusy whites built for oysters and raw fish.', matchGrapes:['Sauvignon Blanc','Chenin','Chardonnay','Riesling','Vermentino'] },
-    others:[ {grape:'Muscadet', why:'Briny and lean — the oyster wine.'}, {grape:'Albariño', why:'Saline and citrusy; perfect with shellfish.'} ], avoid:['Cabernet','Malbec','Zinfandel'] },
-
-  { re:/cheese|charcuterie|cured|salami|prosciutto|board/i, dish:'a cheese board',
-    primary:{ grape:'Nebbiolo', why:'Firm acidity and tannin cut through salty, fatty cheese and cured meats.', deeperTitle:'Barolo / Barbaresco', deeper:'Piedmont Nebbiolo offers structure and savory depth that stands up to a loaded board.', matchGrapes:['Nebbiolo','Gamay','Syrah','Sangiovese'] },
-    others:[ {grape:'Gamay', why:'Bright and juicy — great with softer cheeses.'}, {grape:'Syrah', why:'Smoky and savory for cured meats.'} ], avoid:[] },
-];
-const DEFAULT_RULE = { dish:'this meal',
-  primary:{ grape:'Pinot Noir', why:'A versatile, food-friendly red — light enough for most dishes, with acidity that keeps things fresh.', deeperTitle:'Cool-climate Pinot Noir', deeper:'Oregon or Burgundy Pinot Noir is a safe, food-loving choice across a wide range of meals.', matchGrapes:['Pinot Noir','Gamay'] },
-  others:[ {grape:'Dry Rosé', why:'Crowd-pleasing and flexible across many foods.'}, {grape:'Sauvignon Blanc', why:'Crisp and bright for lighter plates.'} ], avoid:[] };
-
-function priceLimit(q){ const m=q.match(/under\s*\$?(\d+)|below\s*\$?(\d+)|\$(\d+)\s*or less/i); if(!m) return null; return parseInt(m[1]||m[2]||m[3]); }
-const isPairingQuery = (q)=> /\bpair|with|eat|dinner|drink|food|night|meal|\?|\bfor\b/i.test(q) || DISH_RULES.some(r=>r.re.test(q));
-
-function heuristicPairing(query){
-  const rule = DISH_RULES.find(r=>r.re.test(query)) || DEFAULT_RULE;
-  return { dish:rule.dish, primary:rule.primary, others:rule.others, limit:priceLimit(query), avoid:rule.avoid||[] };
-}
+// Pairing guidance lives in lib/pairingrules.js as reviewed, versioned data.
+// Re-exported here so existing importers of this module keep working.
 
 // Build the personalization payload the sommelier function expects.
 // Samples excluded: this payload is sent to the model AS the user's own taste,
@@ -140,23 +90,34 @@ function StyleNote({ grape, why }){
   );
 }
 
-// ── Basis note ──────────────────────────────────────────────────────
-// EVERY sommelier result carries one of these. Labelling only the offline
-// fallback would be worse than labelling nothing: the absence of a warning
-// would teach the user that an unlabelled answer had been verified. It hasn't.
-const BASIS_COPY = {
-  unreachable: 'The AI sommelier is unavailable. This is a general pairing rule built into the app — not a researched bottle recommendation.',
-  unusable:    'The AI sommelier replied but the answer couldn’t be used. This is a general pairing rule built into the app — not a researched bottle recommendation.',
-  ai:          'AI suggestion — written from general wine knowledge. Not checked against critic reviews, prices, or a wine catalog.',
+// ── Basis line ──────────────────────────────────────────────────────
+// One quiet line beneath the answer, not a banner above it. Every answer
+// carries one: labelling only the offline fallback would teach users that an
+// unlabelled answer had been verified.
+//
+// `sources` is unused today and renders only when present. That is deliberate —
+// when a public-web research layer is added later it attaches links here, and
+// the answer experience does not need redesigning around them.
+const BASIS_LABEL = {
+  ai:          'Wine Memory AI · general wine knowledge, not checked against a wine source',
+  rule:        'General pairing guidance built into Wine Memory',
+  unreachable: 'Wine Memory AI is offline · general pairing guidance',
+  unusable:    'Wine Memory AI couldn’t answer · general pairing guidance',
 };
-function BasisNote({ basis }){
-  const copy = BASIS_COPY[basis]; if (!copy) return null;
-  const warn = basis !== 'ai';
+function BasisLine({ basis, sources }){
+  const label = BASIS_LABEL[basis]; if (!label) return null;
+  const off = basis==='unreachable' || basis==='unusable';
+  const tone = off ? T.maybe : T.ink4;
+  const list = sources || [];
   return (
-    <div style={{ display:'flex', gap:8, alignItems:'flex-start', marginBottom:14, padding:'10px 12px', borderRadius:10,
-      background: warn ? T.maybeBg : T.canvas, border:`1px solid ${warn ? 'transparent' : T.line}` }}>
-      <Icon name={warn ? 'edit' : 'sparkle'} size={14} color={warn ? T.maybe : T.ink3} style={{ flexShrink:0, marginTop:1 }}/>
-      <span style={{ fontSize:12.5, lineHeight:1.45, color: warn ? T.maybe : T.ink3 }}>{copy}</span>
+    <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'5px 9px',
+      marginTop:18, paddingTop:11, borderTop:`1px solid ${T.line}` }}>
+      <span style={{ width:5, height:5, borderRadius:99, background:tone, flexShrink:0 }}/>
+      <span style={{ fontSize:11.5, lineHeight:1.4, color:tone }}>{label}</span>
+      {list.map((s,i)=>(
+        <a key={i} href={s.url} target="_blank" rel="noopener noreferrer"
+          style={{ fontSize:11.5, lineHeight:1.4, color:T.ink3 }}>{s.title}</a>
+      ))}
     </div>
   );
 }
@@ -206,7 +167,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
           offline:true, offlineReason: e && e.unusable ? 'unusable' : 'unreachable' });
         setPhase('pairing');
       } else {
-        setData({ mode:'answer', text:'Sorry — I couldn’t reach the sommelier just now. Please try again in a moment.' });
+        setData({ mode:'answer', text:'Sorry — I couldn’t reach Wine Memory AI just now. Please try again in a moment.' });
         setPhase('answer');
       }
     }
@@ -230,7 +191,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
         <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px 12px' }}>
           <div style={{ flex:1, display:'flex', alignItems:'center', gap:9, background:T.raised, border:`1.5px solid ${q?T.ink:T.line}`, borderRadius:12, padding:'0 12px', height:46 }}>
             <Icon name="sparkle" size={17} color={T.maybe}/>
-            <input autoFocus value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') run(); }} placeholder="Ask your sommelier…" style={{ flex:1, border:'none', outline:'none', background:'transparent', fontFamily:'var(--sans)', fontSize:15.5, color:T.ink }}/>
+            <input autoFocus value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') run(); }} placeholder="Ask Wine Memory AI…" style={{ flex:1, border:'none', outline:'none', background:'transparent', fontFamily:'var(--sans)', fontSize:15.5, color:T.ink }}/>
             {q && <button onClick={()=>{ setQ(''); setPhase('idle'); }} style={{ background:'none', border:'none', cursor:'pointer', padding:4, display:'flex' }}><Icon name="x" size={16} color={T.ink3}/></button>}
           </div>
           {q.trim() && q.trim() !== asked
@@ -241,7 +202,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
 
       <div style={{ flex:1, overflowX:'hidden', overflowY:'auto', padding:'16px 16px 40px' }}>
         {phase==='idle' && <>
-          <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.4, marginBottom:12, textTransform:'uppercase' }}>Ask your sommelier</div>
+          <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.4, marginBottom:12, textTransform:'uppercase' }}>Ask Wine Memory AI</div>
           <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
             {EXAMPLES.map(ex=>(
               <button key={ex} onClick={()=>run(ex)} style={{ display:'flex', alignItems:'center', gap:11, textAlign:'left', padding:'13px 14px', border:`1px solid ${T.line}`, background:'#fff', borderRadius:12, cursor:'pointer' }}>
@@ -264,10 +225,10 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
           <div style={{ fontSize:13, color:T.ink3, marginBottom:14 }}>You asked <span style={{ color:T.ink, fontWeight:620 }}>“{asked}”</span></div>
           <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
             <span style={{ width:30, height:30, borderRadius:99, background:T.maybeBg, display:'flex', alignItems:'center', justifyContent:'center' }}><Icon name="sparkle" size={16} color={T.maybe}/></span>
-            <span style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.3, textTransform:'uppercase' }}>Your sommelier</span>
+            <span style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.3, textTransform:'uppercase' }}>Wine Memory AI</span>
           </div>
-          <BasisNote basis={data.basis}/>
           <AnswerText text={data.text}/>
+          <BasisLine basis={data.basis} sources={data.sources}/>
           <button onClick={()=>{ setPhase('idle'); setQ(''); }} style={{ width:'100%', marginTop:22, padding:'13px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:14, fontWeight:600, cursor:'pointer' }}>Ask something else</button>
         </>}
 
@@ -278,8 +239,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
         </>}
 
         {phase==='pairing' && data && <>
-          <BasisNote basis={data.offline ? (data.offlineReason || 'unreachable') : 'ai'}/>
-          <div style={{ fontFamily:'var(--mono)', fontSize:11.5, color:T.ink3, letterSpacing:0.3, textTransform:'uppercase' }}>For {data.dish}</div>
+          <div style={{ fontFamily:'var(--mono)', fontSize:11.5, color:T.ink3, letterSpacing:0.3, textTransform:'uppercase' }}>{data.matched===false ? 'A good general starting point' : 'For '+data.dish}</div>
           {/* Layer 1 — the style */}
           <div style={{ marginTop:8 }}>
             <div style={{ fontSize:26, fontWeight:780, letterSpacing:-0.7, color:T.ink }}>{data.primary.grape}</div>
@@ -305,6 +265,8 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
             <div style={{ fontSize:17, fontWeight:740, letterSpacing:-0.4, marginBottom:4 }}>Other styles that work</div>
             {data.others.map((o,i)=> <StyleNote key={i} grape={o.grape} why={o.why}/>)}
           </div>}
+
+          <BasisLine basis={data.offline ? (data.offlineReason || 'unreachable') : 'ai'} sources={data.sources}/>
 
           {/* learning */}
           {insightGrape && <div style={{ marginTop:22, display:'flex', gap:10, padding:'13px 14px', background:T.buyBg, borderRadius:12 }}>

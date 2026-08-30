@@ -65,7 +65,7 @@ function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, 
         {/* wordmark */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div style={{ fontFamily:'var(--serif)', fontSize:23, fontWeight:500, color:T.ink, letterSpacing:0.2 }}>Wine Memory</div>
-          <div style={{ fontFamily:'var(--sans)', fontSize:9.5, fontWeight:600, letterSpacing:'.28em', textTransform:'uppercase', color:T.ink3 }}>Sommelier</div>
+          <div style={{ fontFamily:'var(--sans)', fontSize:9.5, fontWeight:600, letterSpacing:'.28em', textTransform:'uppercase', color:T.ink3 }}>Wine Memory AI</div>
         </div>
 
         {/* hero */}
@@ -74,7 +74,7 @@ function HomeScreen({ wines, onAsk, onShopping, onHome, onDiningOut, onExplore, 
         {/* sommelier */}
         <button onClick={()=>onAsk('')} style={{ width:'100%', display:'flex', alignItems:'center', gap:12, marginTop:26, background:'transparent', border:`1px solid ${T.line2}`, borderRadius:14, padding:'0 16px', height:54, cursor:'pointer', textAlign:'left' }}>
           <Icon name="sparkle" size={18} color={WINE_RED}/>
-          <span style={{ flex:1, fontFamily:'var(--sans)', fontSize:15.5, color:T.ink3 }}>Ask your sommelier…</span>
+          <span style={{ flex:1, fontFamily:'var(--sans)', fontSize:15.5, color:T.ink3 }}>Ask Wine Memory AI…</span>
           <Icon name="arrow" size={19} color={T.ink}/>
         </button>
         <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:13 }}>
