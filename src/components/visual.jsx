@@ -92,7 +92,7 @@ function Collection({ wines, cols, filter, setFilter, onOpen, onSearch, hasSampl
   const byPairing = vUM(()=> PAIRING_GROUPS.map(g=>({ g, list:base.filter(w=>(w.pairings||[]).some(p=>g.match.includes(p))) })).filter(x=>x.list.length),[base]);
   const colW = Math.floor((CONTENT_W - 12*(cols-1))/cols);
 
-  const chips = [['all','All',T.ink],['totry','To Try',VERDICTS.totry.color],['buy','Buy Again',VERDICTS.buy.color],['maybe','Maybe',VERDICTS.maybe.color],['no','No',VERDICTS.no.color]];
+  const chips = [['all','All',T.ink],['totry','Unopened',VERDICTS.totry.color],['buy','Buy Again',VERDICTS.buy.color],['maybe','Maybe',VERDICTS.maybe.color],['no','No',VERDICTS.no.color]];
 
   return (
     <div style={{ height:'100%', overflowX:'hidden', overflowY:'auto', background:'#fff' }}>
@@ -151,8 +151,8 @@ function EmptyFilter({ filter }){
   return (
     <div style={{ textAlign:'center', padding:'72px 44px' }}>
       <div style={{ width:54, height:54, borderRadius:99, background:T.raised, display:'inline-flex', alignItems:'center', justifyContent:'center', marginBottom:16 }}><Icon name={filter==='totry'?'clock':'bottle'} size={24} color={T.ink3}/></div>
-      <div style={{ fontSize:16.5, fontWeight:700 }}>{filter==='totry'?'Nothing to try yet':`Nothing marked ${v?v.label:''}`}</div>
-      <div style={{ fontSize:13.5, color:T.ink3, marginTop:6, lineHeight:1.5 }}>{filter==='totry'?'Paste an order with the + button to fill your To Try list.':'Tap a wine and set its verdict — it’ll appear here.'}</div>
+      <div style={{ fontSize:16.5, fontWeight:700 }}>{filter==='totry'?'No unopened wines yet':`Nothing marked ${v?v.label:''}`}</div>
+      <div style={{ fontSize:13.5, color:T.ink3, marginTop:6, lineHeight:1.5 }}>{filter==='totry'?'Add a bottle or paste an order with the + button.':'Tap a wine and set its verdict — it’ll appear here.'}</div>
     </div>
   );
 }

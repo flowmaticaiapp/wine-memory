@@ -27,7 +27,7 @@ const VERDICTS = {
   buy:   { id:'buy',   label:'Buy Again', short:'Buy', color:T.buy,   bg:T.buyBg,   glyph:'check' },
   maybe: { id:'maybe', label:'Maybe',     short:'Maybe', color:T.maybe, bg:T.maybeBg, glyph:'tilde' },
   no:    { id:'no',    label:'No',        short:'No',  color:T.no,    bg:T.noBg,    glyph:'cross' },
-  totry: { id:'totry', label:'To Try',    short:'To Try', color:T.totry, bg:T.totryBg, glyph:'clock' },
+  totry: { id:'totry', label:'Unopened',  short:'Unopened', color:T.totry, bg:T.totryBg, glyph:'clock' },
 };
 const VERDICT_ORDER = ['buy','maybe','no']; // the settable verdicts (To Try is a queue status)
 

@@ -18,6 +18,7 @@ import { SnapLabel } from './components/snap.jsx';
 import { Onboarding } from './components/Onboarding.jsx';
 import { FirstSuccess } from './components/FirstSuccess.jsx';
 import { PairingSearch } from './components/pairing.jsx';
+import { PairingHome } from './components/pairinghome.jsx';
 import { DiningOut } from './components/diningout.jsx';
 import { LearnReader } from './components/TodaysPour.jsx';
 import { supabase, supabaseConfigured } from './lib/supabase.js';
@@ -42,7 +43,7 @@ function VNav({ tab, setTab }){
       {item('collection','collection','Cellar')}
       <div style={{ width:62, flexShrink:0 }}/>
       {item('palate','heart','Palate')}
-      {item('account','user','Account')}
+      {item('learn','globe','Explore')}
     </div>
   );
 }
@@ -54,6 +55,11 @@ function VToast({ toast }){
   return <div style={{ position:'absolute', bottom:'calc(92px + env(safe-area-inset-bottom))', left:'50%', transform:'translateX(-50%)', zIndex:95, display:'flex', alignItems:'center', gap:9, background:T.ink, color:'#fff', padding:'12px 18px', borderRadius:99, boxShadow:'0 8px 24px rgba(17,17,19,0.3)', whiteSpace:'nowrap', animation:'wmToast .3s cubic-bezier(.2,.8,.2,1)' }}>
     <span style={{ width:20, height:20, borderRadius:99, background:T.buy, display:'flex', alignItems:'center', justifyContent:'center' }}><Icon name="check" size={13} color="#fff" stroke={3}/></span>
     <span style={{ fontFamily:'var(--sans)', fontSize:14, fontWeight:600 }}>{toast}</span></div>;
+}
+
+function NavigationDrawer({ onClose, go, email, userId }){
+  const rows=[['Favorites','favorites'],['Wishlist','wishlist'],['Must Try','musttry'],['My Cellar','collection'],['Tonight','tonight'],['Pairings','pairings'],['My Palate','palate'],['Explore','learn'],['Dining Out','diningout'],['Add a wine','addhub']];
+  return <div style={{position:'absolute',inset:0,zIndex:110,background:'rgba(23,21,15,.25)'}} onClick={onClose}><aside role="dialog" aria-label="Navigation" onClick={e=>e.stopPropagation()} style={{width:'82%',height:'100%',background:'#fff',boxShadow:'12px 0 36px rgba(23,21,15,.18)',display:'flex',flexDirection:'column'}}><div style={{padding:'58px 22px 18px',borderBottom:`1px solid ${T.line}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontFamily:'var(--serif)',fontSize:23}}>Wine Memory</span><button aria-label="Close menu" onClick={onClose} style={{border:0,background:'none',padding:8,cursor:'pointer'}}><Icon name="x" size={22}/></button></div><nav style={{padding:'12px 12px',overflowY:'auto',flex:1}}>{rows.map(([label,id],i)=><React.Fragment key={id}>{(i===0||i===4||i===9)&&<div style={{fontSize:9.5,letterSpacing:'.2em',textTransform:'uppercase',color:T.ink4,padding:'13px 12px 6px'}}>{i===0?'Your wines':i===4?'Ask & learn':'Add'}</div>}<button onClick={()=>go(id)} style={{width:'100%',border:0,background:'none',padding:'11px 12px',textAlign:'left',fontFamily:'var(--serif)',fontSize:18,color:T.ink,cursor:'pointer'}}>{label}</button></React.Fragment>)}</nav><div style={{padding:'15px 22px 28px',borderTop:`1px solid ${T.line}`}}><button onClick={()=>go('account')} style={{border:0,background:'none',padding:0,fontSize:14,fontWeight:650,cursor:'pointer'}}>Account</button><div style={{fontSize:11,color:T.ink3,marginTop:4,overflow:'hidden',textOverflow:'ellipsis'}}>{email}</div><button onClick={()=>signOut(userId)} style={{border:0,background:'none',padding:'13px 0 0',fontSize:13,color:T.ink2,cursor:'pointer'}}>Sign out</button></div></aside></div>;
 }
 
 function AccountScreen({ email, provider }){
@@ -174,7 +180,7 @@ function VApp({ session }){
 
   const navTo=(t)=>{ setOverlay(null); setTab(t); };
   const detail = (overlay&&overlay.detail&&wines)? wines.find(w=>w.id===overlay.detail):null;
-  const fullPanel = ['searchadd','import','search','diningout','snap','pour'].includes(overlay);
+  const fullPanel = ['searchadd','import','search','diningout','snap','pour','pairinghome','menu'].includes(overlay);
   const hasSamples = wines? wines.some(w=>w.sample) : false;
   // The palate gate must count the SAME wines the palate engine will use.
   // Counting samples here would open the portrait on demo bottles and then hand
@@ -185,7 +191,7 @@ function VApp({ session }){
     <div style={{ position:'relative', height:'100%', width:'100%', background:'#fff', overflow:'hidden' }}>
       {loading && <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}><svg width={30} height={30} viewBox="0 0 24 24" style={{ animation:'wmSpin .8s linear infinite' }}><circle cx="12" cy="12" r="9" fill="none" stroke={T.line2} strokeWidth="2.6"/><path d="M21 12a9 9 0 00-9-9" fill="none" stroke={T.ink} strokeWidth="2.6" strokeLinecap="round"/></svg></div>}
       {!loading && <>
-      {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onShopping={()=>setOverlay('addhub')} onHome={()=>ask('')} onDiningOut={()=>{ track('dining_opened'); setOverlay('diningout'); }} onExplore={()=>setTab('learn')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')} onLearn={()=>setOverlay('pour')} onPalate={()=>setTab('palate')}/>}
+      {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onMenu={()=>setOverlay('menu')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')} onFavorites={()=>{setTab('collection');setFilter('buy')}} onWishlist={()=>{setTab('collection');setFilter('totry')}} onMustTry={()=>ask('Based on my palate, what wine styles, grapes, or regions should I try next?')} onPairings={()=>setOverlay('pairinghome')}/>}
       {tab==='collection' && <Collection wines={wines} cols={cols} filter={filter} setFilter={setFilter} hasSamples={hasSamples} onClearSamples={clearSamples} onOpen={(id)=>setOverlay({detail:id})} onSearch={()=>ask('')}/>}
       {tab==='palate' && (palateCount < 5
         ? <PalatePlaceholder count={palateCount} onAdd={()=>setOverlay('addhub')} onExplore={()=>setTab('learn')} onLearn={()=>setOverlay('pour')}/>
@@ -200,8 +206,10 @@ function VApp({ session }){
       {overlay==='searchadd' && <SearchAdd onClose={()=>setOverlay(null)} onSave={addWine} verdictVariant={t.verdictStyle}/>}
       {overlay==='import' && <OrderImport onClose={()=>setOverlay(null)} onAddMany={addMany} onViewToTry={viewToTry}/>}
       {overlay==='search' && <PairingSearch wines={wines} userId={userId} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
+      {overlay==='pairinghome' && <PairingHome onBack={()=>setOverlay(null)} onMenu={()=>setOverlay('menu')} onAsk={ask}/>}
       {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining} recent={dining}/>}
       {overlay==='pour' && <LearnReader onClose={()=>setOverlay(null)} onExplore={()=>{ setOverlay(null); setTab('learn'); }}/>}
+      {overlay==='menu' && <NavigationDrawer email={session.user.email} userId={userId} onClose={()=>setOverlay(null)} go={(id)=>{ if(id==='pairings')setOverlay('pairinghome'); else if(id==='tonight')ask('What should I open tonight?'); else if(id==='diningout')setOverlay('diningout'); else if(id==='addhub')setOverlay('addhub'); else if(id==='favorites'){setOverlay(null);setTab('collection');setFilter('buy')} else if(id==='wishlist'){setOverlay(null);setTab('collection');setFilter('totry')} else if(id==='musttry')ask('Based on my palate, what wine styles, grapes, or regions should I try next?'); else {setOverlay(null);setTab(id)}}}/>}
       {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} onAddPhoto={addPhoto} verdictVariant={t.verdictStyle}/>}
 
       {onboarding && wines.length===0 && <Onboarding onSnap={()=>{ finishOnboarding(); setOverlay('snap'); }} onSkip={finishOnboarding}/>}
