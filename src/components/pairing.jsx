@@ -30,6 +30,38 @@ const EXAMPLES = [
 // Pairing guidance lives in lib/pairingrules.js as reviewed, versioned data.
 // Re-exported here so existing importers of this module keep working.
 
+// The last answer survives a locked phone or a dead spot between the shop door
+// and the shelf. Kept short — a pairing is for tonight, not next week.
+const LAST_ANSWER_KEY = 'wm_last_pairing';
+const LAST_ANSWER_TTL = 1000 * 60 * 60 * 12;
+
+// One-detail refinements. Each appends a qualifier to the question already
+// asked rather than starting over, so the original stays visible and the user
+// does not retype anything in a shop aisle.
+const REFINEMENTS = [
+  ['Under $20', 'under $20'],
+  ['Something white', 'but a white wine'],
+  ['Lighter', 'but something lighter'],
+  ['Less oaky', 'with little or no oak'],
+  ['A bit sweeter', 'slightly sweeter'],
+];
+
+// Module scope on purpose: these touch Date.now() and localStorage, which the
+// react-hooks lint rules (rightly) will not allow inside a component body.
+function readLastAnswer(){
+  try {
+    const raw = localStorage.getItem(LAST_ANSWER_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (!saved || !saved.data || (Date.now()-saved.at) > LAST_ANSWER_TTL) return null;
+    return saved;
+  } catch { return null; }
+}
+function writeLastAnswer(question, data){
+  try { localStorage.setItem(LAST_ANSWER_KEY, JSON.stringify({ at:Date.now(), asked:question, data })); }
+  catch { /* storage full or blocked — the answer still shows */ }
+}
+
 // Build the personalization payload the sommelier function expects.
 // Samples excluded: this payload is sent to the model AS the user's own taste,
 // so a demo bottle here would put words in the user's mouth.
@@ -108,25 +140,6 @@ function StyleNote({ grape, why, direction }){
   );
 }
 
-// "What to look for" is the step that turns an abstract characteristic into
-// something findable on a shelf. A pairing answer that stops at "high-acid,
-// savoury" has not finished the job.
-function LookFor({ items }){
-  const list = (items||[]).filter(Boolean); if (!list.length) return null;
-  return (
-    <div style={{ marginTop:22, padding:'14px 16px', background:T.canvas, border:`1px solid ${T.line}`, borderRadius:13 }}>
-      <div style={{ fontFamily:'var(--mono)', fontSize:10, letterSpacing:'.13em', textTransform:'uppercase', color:T.ink3, marginBottom:8 }}>What to look for</div>
-      <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
-        {list.map((t,i)=>(
-          <div key={i} style={{ display:'flex', gap:9, fontSize:13.5, color:T.ink2, lineHeight:1.45 }}>
-            <span style={{ flexShrink:0, width:4, height:4, borderRadius:99, background:T.ink4, marginTop:7 }}/>
-            <span>{t}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // Shown only when a real conflict exists — an empty "avoid" section would be
 // noise, and would imply a warning where there is none.
@@ -188,7 +201,25 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
   const [data, setData] = pUS(null);
   const [asked, setAsked] = pUS('');
   const [saved, setSaved] = pUS(false);
+  const [showWhy, setShowWhy] = pUS(false);   // depth stays closed by default
   const didInit = pUR(false);
+
+  // Restore the last answer. Someone standing in a shop whose phone locks, or
+  // who walks into a dead spot between the door and the shelf, should not lose
+  // the recommendation they came in with.
+  pUE(()=>{
+    if (didInit.current || initialQuery) return;
+    const saved = readLastAnswer();
+    if (!saved) return;
+    // Re-match the cellar rather than trusting the stored copy: bottles may
+    // have been added, drunk or re-rated since.
+    const d = saved.data;
+    setData(d.mode==='pairing' ? { ...d, owned:ownedMatches(d, wines) } : d);
+    setAsked(saved.asked||''); setQ(saved.asked||'');
+    setPhase(d.mode==='pairing' ? 'pairing' : 'answer');
+  }, []);
+
+  const remember = (d, question)=> writeLastAnswer(question, d);
 
   const run = async (query)=>{
     const Q = (query!=null?query:q).trim(); if(!Q) return;
@@ -198,10 +229,12 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
       const r = await askSommelier(Q, wines);   // model classifies pairing vs. answer
       if (r && r.kind==='pairing' && r.primary){
         const out = { dish:r.dish||Q, primary:r.primary, others:r.others||[], avoid:[], avoidNote:r.avoidNote||'', limit:priceLimit(Q) };
-        setData({ mode:'pairing', ...out, owned:ownedMatches(out, wines) });
+        const d = { mode:'pairing', ...out, owned:ownedMatches(out, wines) };
+        setData(d); remember(d, Q);
         setPhase('pairing');
       } else if (r && r.kind==='answer' && (r.text||'').trim()){
-        setData({ mode:'answer', text:r.text.trim(), basis:'ai' });
+        const d = { mode:'answer', text:r.text.trim(), basis:'ai' };
+        setData(d); remember(d, Q);
         setPhase('answer');
       } else {
         const err = new Error('empty sommelier result'); err.unusable = true; throw err;
@@ -213,8 +246,9 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
       // "answered, but unusably" are different things and the banner says which.
       if (isPairingQuery(Q)){
         const out = heuristicPairing(Q);
-        setData({ mode:'pairing', ...out, owned:ownedMatches(out, wines),
-          offline:true, offlineReason: e && e.unusable ? 'unusable' : 'unreachable' });
+        const d = { mode:'pairing', ...out, owned:ownedMatches(out, wines),
+          offline:true, offlineReason: e && e.unusable ? 'unusable' : 'unreachable' };
+        setData(d); remember(d, Q);
         setPhase('pairing');
       } else {
         setData({ mode:'answer', text:'Sorry — I couldn’t reach your sommelier just now. Please try again in a moment.' });
@@ -222,7 +256,7 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
       }
     }
   };
-  pUE(()=>{ setSaved(false); }, [asked]);
+  pUE(()=>{ setSaved(false); setShowWhy(false); }, [asked]);
   pUE(()=>{ if(initialQuery && !didInit.current){ didInit.current=true; run(initialQuery); } }, [initialQuery]);
 
   const savePairing = ()=>{
@@ -289,37 +323,84 @@ function PairingSearch({ wines, onClose, onOpen, initialQuery, onSavePairing }){
         </>}
 
         {phase==='pairing' && data && <>
-          <div style={{ fontFamily:'var(--mono)', fontSize:11.5, color:T.ink3, letterSpacing:0.3, textTransform:'uppercase' }}>{data.matched===false ? 'A good general starting point' : 'For '+data.dish}</div>
-          {/* Layer 1 — the style */}
-          <div style={{ marginTop:8 }}>
-            <div style={{ fontSize:26, fontWeight:780, letterSpacing:-0.7, color:T.ink }}>{data.primary.grape}</div>
-            <div style={{ fontSize:15, color:T.ink2, lineHeight:1.55, marginTop:7 }}>{data.primary.why}</div>
-          </div>
-          {/* deeper dive */}
-          {data.primary.deeper && <div style={{ marginTop:15, padding:'15px 16px', background:`hsl(${typeHue(data.owned&&data.owned[0]?data.owned[0].type:'Red')} 30% 97%)`, border:`1px solid ${T.line}`, borderRadius:14 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:7, fontFamily:'var(--mono)', fontSize:10.5, color:T.maybe, letterSpacing:0.4, textTransform:'uppercase' }}><Icon name="sparkle" size={13} color={T.maybe}/> Want to explore deeper?</div>
-            <div style={{ fontSize:16, fontWeight:720, color:T.ink, letterSpacing:-0.3, marginTop:7 }}>{data.primary.deeperTitle}</div>
-            <div style={{ fontSize:14, color:T.ink2, lineHeight:1.55, marginTop:5 }}>{data.primary.deeper}</div>
+          {/* The question stays visible — someone refining in an aisle needs to
+              see what was actually asked. */}
+          <div style={{ fontSize:12.5, color:T.ink3, marginBottom:12 }}>You asked <span style={{ color:T.ink2, fontWeight:600 }}>“{asked}”</span></div>
+
+          {/* ── The ten-second block ──────────────────────────────────
+              Recommendation before explanation. Everything a hurried shopper
+              needs to locate a bottle sits above this fold; depth is behind
+              "Why this?". */}
+          <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.ink3, letterSpacing:'.14em', textTransform:'uppercase' }}>Look for</div>
+          <div style={{ fontSize:30, fontWeight:790, letterSpacing:-0.9, color:T.ink, lineHeight:1.05, marginTop:4 }}>{data.primary.grape}</div>
+
+          {data.primary.deeperTitle && <div style={{ marginTop:12 }}>
+            <span style={{ fontFamily:'var(--mono)', fontSize:10, color:T.maybe, letterSpacing:'.12em', textTransform:'uppercase' }}>Best bet</span>
+            <div style={{ fontSize:16.5, fontWeight:700, color:T.ink, letterSpacing:-0.3, marginTop:3 }}>{data.primary.deeperTitle}</div>
           </div>}
 
-          <LookFor items={data.primary.lookFor}/>
+          <div style={{ fontSize:14.5, color:T.ink2, lineHeight:1.5, marginTop:8 }}>{data.primary.why}</div>
+
+          {/* On the shelf — the exact words to look for */}
+          {(data.primary.lookFor||[]).length>0 && <div style={{ marginTop:14, padding:'12px 14px', background:T.canvas, border:`1px solid ${T.line}`, borderRadius:12 }}>
+            <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.13em', textTransform:'uppercase', color:T.ink3, marginBottom:7 }}>On the label</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+              {data.primary.lookFor.slice(0,3).map((t,i)=>(
+                <div key={i} style={{ display:'flex', gap:8, fontSize:13, color:T.ink2, lineHeight:1.4 }}>
+                  <span style={{ flexShrink:0, width:4, height:4, borderRadius:99, background:T.ink4, marginTop:6 }}/><span>{t}</span>
+                </div>
+              ))}
+            </div>
+          </div>}
+
+          {/* Also works — one line, never a second essay */}
+          {data.others && data.others.length>0 && <div style={{ marginTop:14, display:'flex', flexWrap:'wrap', alignItems:'baseline', gap:'4px 8px' }}>
+            <span style={{ fontFamily:'var(--mono)', fontSize:10, color:T.ink3, letterSpacing:'.12em', textTransform:'uppercase' }}>Also works</span>
+            <span style={{ fontSize:14.5, color:T.ink, fontWeight:620 }}>{data.others.slice(0,2).map(o=>o.grape).join('  ·  ')}</span>
+          </div>}
+
           <AvoidNote text={data.avoidNote}/>
 
-          {/* Layer 2 — your bottles */}
-          <div style={{ marginTop:26 }}>
-            <div style={{ fontSize:17, fontWeight:740, letterSpacing:-0.4, marginBottom:12 }}>From your collection</div>
+          {/* In your cellar — kept visually distinct from what to buy */}
+          <div style={{ marginTop:20, paddingTop:18, borderTop:`2px solid ${T.line2}` }}>
+            <div style={{ display:'flex', alignItems:'baseline', gap:9, marginBottom:11 }}>
+              <span style={{ fontSize:16.5, fontWeight:740, letterSpacing:-0.35 }}>In your cellar</span>
+              <span style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3 }}>{data.owned.length ? `${data.owned.length} match${data.owned.length>1?'es':''}` : 'nothing matching'}</span>
+            </div>
             {data.owned.length
               ? data.owned.map(w=> <OwnedRow key={w.id} w={w} onOpen={onOpen}/>)
-              : <div style={{ padding:'16px', border:`1px dashed ${T.line2}`, borderRadius:13, background:T.canvas, fontSize:13.5, color:T.ink2, lineHeight:1.5 }}>You don’t own a {data.primary.grape} yet. Next time you’re shopping, that’s the style to look for — or paste an order to add one.</div>}
+              : <div style={{ padding:'14px', border:`1px dashed ${T.line2}`, borderRadius:12, background:T.canvas, fontSize:13.5, color:T.ink2, lineHeight:1.5 }}>Nothing here fits this one — the shelf guidance above is what to buy.</div>}
           </div>
 
-          {/* other styles */}
-          {data.others && data.others.length>0 && <div style={{ marginTop:26 }}>
-            <div style={{ fontSize:17, fontWeight:740, letterSpacing:-0.4, marginBottom:4 }}>Other styles that work</div>
-            {data.others.map((o,i)=> <StyleNote key={i} grape={o.grape} why={o.why} direction={o.direction}/>)}
-          </div>}
+          {/* Refine without starting over */}
+          <div style={{ marginTop:20 }}>
+            <div style={{ fontFamily:'var(--mono)', fontSize:9.5, color:T.ink3, letterSpacing:'.13em', textTransform:'uppercase', marginBottom:8 }}>Change one thing</div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:7 }}>
+              {REFINEMENTS.map(([label, qualifier])=>(
+                <button key={label} onClick={()=>run(`${asked}, ${qualifier}`)}
+                  style={{ padding:'7px 12px', borderRadius:99, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2,
+                    fontFamily:'var(--sans)', fontSize:12.5, fontWeight:560, cursor:'pointer' }}>{label}</button>
+              ))}
+            </div>
+          </div>
 
-          <BasisLine basis={data.offline ? (data.offlineReason || 'unreachable') : 'ai'} sources={data.sources}/>
+          {/* Depth, behind one control */}
+          <button onClick={()=>setShowWhy(v=>!v)} style={{ marginTop:20, background:'none', border:'none', padding:0, cursor:'pointer',
+            display:'inline-flex', alignItems:'center', gap:6, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, color:T.ink2 }}>
+            <Icon name={showWhy?'x':'sparkle'} size={14} color={T.ink2}/>{showWhy ? 'Hide the detail' : 'Why this?'}
+          </button>
+
+          {showWhy && <div style={{ marginTop:12 }}>
+            {data.primary.deeper && <div style={{ padding:'14px 16px', background:`hsl(${typeHue(data.owned&&data.owned[0]?data.owned[0].type:'Red')} 30% 97%)`, border:`1px solid ${T.line}`, borderRadius:13 }}>
+              <div style={{ fontSize:15.5, fontWeight:700, color:T.ink, letterSpacing:-0.25 }}>{data.primary.deeperTitle}</div>
+              <div style={{ fontSize:14, color:T.ink2, lineHeight:1.55, marginTop:5 }}>{data.primary.deeper}</div>
+            </div>}
+            {data.others && data.others.length>0 && <div style={{ marginTop:18 }}>
+              <div style={{ fontSize:15.5, fontWeight:720, letterSpacing:-0.3, marginBottom:2 }}>How the alternatives differ</div>
+              {data.others.slice(0,2).map((o,i)=> <StyleNote key={i} grape={o.grape} why={o.why} direction={o.direction}/>)}
+            </div>}
+            <BasisLine basis={data.offline ? (data.offlineReason || 'unreachable') : 'ai'} sources={data.sources}/>
+          </div>}
 
           {/* learning */}
           {insightGrape && <div style={{ marginTop:22, display:'flex', gap:10, padding:'13px 14px', background:T.buyBg, borderRadius:12 }}>
