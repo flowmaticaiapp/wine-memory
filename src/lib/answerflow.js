@@ -54,6 +54,10 @@ export function instantEligible(query){
 // research-first question that misses it falls into the existing honest
 // fallback path.
 export const RESEARCH_TIMEOUT_MS = 20_000;
+// Research-first explainers perform web research and then a structured answer
+// call. They get a longer ceiling than background pairing enrichment; otherwise
+// a healthy request can be discarded while its second step is still running.
+export const RESEARCH_FIRST_TIMEOUT_MS = 45_000;
 
 // Reject with a `.timeout` flag after `ms`. The underlying request is not
 // aborted — its eventual result is simply ignored by the caller's run token.
@@ -67,6 +71,12 @@ export function withTimeout(promise, ms = RESEARCH_TIMEOUT_MS){
     }, ms);
   });
   return Promise.race([promise, gate]).finally(() => clearTimeout(timer));
+}
+
+export function sommelierFailureMessage(error){
+  if (error?.blocked && error.message) return error.message;
+  if (error?.timeout) return 'Your sommelier is still having trouble reaching public wine sources. Please try again in a moment.';
+  return 'Sorry — I couldn’t reach your sommelier just now. Please try again in a moment.';
 }
 
 // Build the instant pairing answer from a heuristic result. `basis:'rule'`

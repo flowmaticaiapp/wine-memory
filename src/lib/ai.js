@@ -18,8 +18,9 @@ export async function invokeAI(fn, body){
     if (blocked && typeof window !== 'undefined'){
       window.dispatchEvent(new CustomEvent('wm-ai-blocked', { detail: msg || 'Please sign in to use Wine Memory.' }));
     }
-    const e = new Error(blocked ? msg : 'request failed');
+    const e = new Error(msg || (blocked ? 'Please sign in to use Wine Memory.' : 'request failed'));
     e.blocked = blocked;
+    e.status = status;
     throw e;
   }
   return data;

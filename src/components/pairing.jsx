@@ -16,7 +16,7 @@ import { textMatchesAnyGrape } from '../lib/grapes.js';
 import { needsTonightGuidance, rankTonightBottles, tonightReason, alternativeDirection } from '../lib/tonight.js';
 import { relevantBuyAgainGrape } from '../lib/pairing-insight.js';
 import { readLastAnswer, writeLastAnswer } from '../lib/lastanswer.js';
-import { withTimeout, instantEligible, instantPairing, reconcileEnrichment, enrichmentDisposition, pairingBasis } from '../lib/answerflow.js';
+import { withTimeout, instantEligible, instantPairing, reconcileEnrichment, enrichmentDisposition, pairingBasis, RESEARCH_FIRST_TIMEOUT_MS, sommelierFailureMessage } from '../lib/answerflow.js';
 import { supabase } from '../lib/supabase.js';
 import { invokeAI } from '../lib/ai.js';
 import { track } from '../lib/analytics.js';
@@ -307,9 +307,13 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     }
 
     setPhase('thinking');
+    const slowTimer = setTimeout(()=>{
+      if (token === runCounter && mounted.current) setPhase('thinking-slow');
+    }, 8_000);
     try {
       if (!supabase) throw new Error('not configured');
-      const r = await withTimeout(askSommelier(Q, wines));   // model classifies pairing vs. answer
+      const r = await withTimeout(askSommelier(Q, wines), RESEARCH_FIRST_TIMEOUT_MS);   // model classifies pairing vs. answer
+      clearTimeout(slowTimer);
       if (token !== runCounter || !mounted.current) return; // superseded, or the screen is gone
       if (r && r.kind==='pairing' && r.primary){
         const out = { dish:r.dish||Q, primary:r.primary, others:r.others||[], avoid:[], avoidNote:r.avoidNote||'',
@@ -326,6 +330,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
         const err = new Error('empty sommelier result'); err.unusable = true; throw err;
       }
     } catch(e){
+      clearTimeout(slowTimer);
       if (token !== runCounter || !mounted.current) return; // superseded, or the screen is gone
       console.error('sommelier failed', e);
       // Graceful fallback: pairing questions still get a useful answer. Track
@@ -337,7 +342,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
         setData(d); remember(d, Q);
         setPhase('pairing');
       } else {
-        setData({ mode:'answer', text:'Sorry — I couldn’t reach your sommelier just now. Please try again in a moment.' });
+        setData({ mode:'answer', text:sommelierFailureMessage(e) });
         setPhase('answer');
       }
     }
@@ -402,10 +407,10 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
         {phase==='guide-meal' && <TonightChoices step="meal" meal={guideMeal} onMeal={chooseMeal} onMood={chooseMood}/>}
         {phase==='guide-mood' && <TonightChoices step="mood" meal={guideMeal} onMeal={chooseMeal} onMood={chooseMood}/>}
 
-        {phase==='thinking' && <div style={{ paddingTop:60, display:'flex', flexDirection:'column', alignItems:'center' }}>
+        {(phase==='thinking' || phase==='thinking-slow') && <div style={{ paddingTop:60, display:'flex', flexDirection:'column', alignItems:'center' }}>
           <Spinner size={40} stroke={3}/>
-          <div style={{ fontSize:15.5, fontWeight:680, marginTop:18 }}>Thinking it through…</div>
-          <div style={{ fontSize:13, color:T.ink3, marginTop:5, textAlign:'center', maxWidth:'30ch' }}>Finding the best wine for “{asked}”.</div>
+          <div style={{ fontSize:15.5, fontWeight:680, marginTop:18 }}>{phase==='thinking-slow'?'Still checking sources…':'Thinking it through…'}</div>
+          <div style={{ fontSize:13, color:T.ink3, marginTop:5, textAlign:'center', maxWidth:'30ch' }}>{phase==='thinking-slow'?'Public wine research is taking a little longer than usual.':'Finding the best wine for “'+asked+'”.'}</div>
         </div>}
 
         {phase==='answer' && data && <>

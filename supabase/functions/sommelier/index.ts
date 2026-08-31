@@ -210,9 +210,17 @@ Deno.serve(async (req) => {
       });
     };
 
-    let res = await callClaude(true);
+    let withEffort = true;
+    let res = await callClaude(withEffort);
     if (res.status === 400 && /effort parameter/i.test(await res.clone().text())) {
-      res = await callClaude(false);
+      withEffort = false;
+      res = await callClaude(withEffort);
+    }
+    // One bounded retry for temporary provider pressure. The request is
+    // read-only and structured, so replaying it cannot duplicate user data.
+    if (res.status === 429 || res.status >= 500) {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      res = await callClaude(withEffort);
     }
 
     if (!res.ok) {

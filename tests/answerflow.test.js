@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 
 import {
   RESEARCH_TIMEOUT_MS, withTimeout, instantEligible, instantPairing, reconcileEnrichment,
-  enrichmentDisposition, pairingBasis,
+  enrichmentDisposition, pairingBasis, RESEARCH_FIRST_TIMEOUT_MS, sommelierFailureMessage,
 } from '../src/lib/answerflow.js';
 import { heuristicPairing } from '../src/lib/pairingrules.js';
 
@@ -94,6 +94,19 @@ test('the timeout is firm and flags itself', async () => {
 test('a fast response passes through the timeout untouched', async () => {
   const r = await withTimeout(Promise.resolve({ ok:true }), 5_000);
   assert.deepEqual(r, { ok:true });
+});
+
+test('research-first explainers get time for search plus answer, without an unlimited spinner', () => {
+  assert.ok(RESEARCH_FIRST_TIMEOUT_MS > RESEARCH_TIMEOUT_MS,
+    'two sequential research steps need more time than background enrichment');
+  assert.ok(RESEARCH_FIRST_TIMEOUT_MS <= 60_000, 'the longer ceiling is still bounded');
+});
+
+test('sommelier failures distinguish a usage block, a research timeout, and an outage', () => {
+  const blocked = Object.assign(new Error('Daily limit reached.'), { blocked:true });
+  assert.equal(sommelierFailureMessage(blocked), 'Daily limit reached.');
+  assert.match(sommelierFailureMessage(Object.assign(new Error('x'), { timeout:true })), /public wine sources/i);
+  assert.match(sommelierFailureMessage(new Error('network')), /couldn.t reach/i);
 });
 
 // ── Reconciliation: what a late response may change ──────────────────
