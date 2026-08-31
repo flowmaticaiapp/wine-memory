@@ -26,7 +26,7 @@ function ExperienceCard({ experience, onFind, searching }){
       <div style={{ fontSize:12.5, color:T.ink3, marginTop:3 }}>{experience.subtitle}</div>
       <div style={{ fontSize:13.5, color:T.ink2, lineHeight:1.5, marginTop:9 }}>{experience.why}</div>
       <div style={{ marginTop:10, padding:'9px 10px', borderRadius:10, background:T.canvas }}>
-        <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.11em', textTransform:'uppercase', color:T.maybe }}>On the label</div>
+        <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.11em', textTransform:'uppercase', color:T.maybe }}>Try one of these</div>
         <div style={{ fontSize:12.5, color:T.ink2, lineHeight:1.45, marginTop:3 }}>{experience.lookFor}</div>
       </div>
       <div style={{ display:'flex', flexWrap:'wrap', gap:'4px 10px', marginTop:9 }}>
