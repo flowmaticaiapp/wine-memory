@@ -211,10 +211,12 @@ test('pork tacos reach their own rule and never masquerade as roast chicken', ()
   for (const question of ['best wine type for pork tacos', 'tacos with pork', 'carnitas tacos', 'tacos al pastor']){
     const r = heuristicPairing(question);
     assert.equal(r.ruleId, 'pork-tacos', question);
-    assert.equal(r.dish, 'pork tacos');
+    assert.equal(r.dish, 'Mexican pork tacos');
     assert.equal(r.primary.grape, 'Dry Rosé');
     assert.match(r.primary.why, /pork/i);
-    assert.match(r.primary.why, /chile|lime|salsa|taco/i);
+    assert.match(r.primary.why, /Mexican|taco/i);
+    assert.match(r.primary.why, /chile|lime|salsa/i);
+    assert.match(r.primary.why, /tortilla/i);
   }
 });
 
