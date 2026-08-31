@@ -49,7 +49,15 @@ test('the timeout is firm and flags itself', async () => {
   assert.ok(RESEARCH_TIMEOUT_MS >= 5_000 && RESEARCH_TIMEOUT_MS <= 60_000,
     'a firm, human-scale ceiling');
   const never = new Promise(() => {});
-  await assert.rejects(withTimeout(never, 10), (e) => e.timeout === true);
+  // The watchdog makes a broken timeout FAIL this test rather than hang it:
+  // if withTimeout never rejects, the watchdog wins the race and the
+  // assertion below sees the wrong error.
+  const watchdog = new Promise((resolve) => setTimeout(() => resolve('watchdog: nothing timed out'), 500));
+  const result = await Promise.race([
+    withTimeout(never, 10).then(() => 'resolved', (e) => (e.timeout === true ? 'timed out with flag' : 'rejected without flag')),
+    watchdog,
+  ]);
+  assert.equal(result, 'timed out with flag');
 });
 
 test('a fast response passes through the timeout untouched', async () => {
