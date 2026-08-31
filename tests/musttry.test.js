@@ -88,6 +88,8 @@ test('a candidate renders only with full identity and cited sources', () => {
   assert.equal(displayableCandidates({ candidates:[{ ...GOOD, vintage:'' }] }).length, 0, 'no vintage, no bottle');
   assert.equal(displayableCandidates({ candidates:[{ ...GOOD, producer:'' }] }).length, 0);
   assert.equal(displayableCandidates({ candidates:[{ ...GOOD, sources:[{ title:'x', url:'http://insecure' }] }] }).length, 0, 'citations must be https');
+  assert.equal(displayableCandidates({ candidates:[{ ...GOOD, sources:undefined }] }).length, 0, 'a malformed response neither renders nor throws');
+  assert.equal(displayableCandidates({ candidates:[{ ...GOOD, sources:'not-a-list' }] }).length, 0);
   assert.equal(displayableCandidates(null).length, 0);
 });
 
