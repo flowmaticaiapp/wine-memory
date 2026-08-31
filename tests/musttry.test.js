@@ -9,6 +9,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   mustTryGuidance, mustTryExperiences, MUST_TRY_EXPERIENCES, tasteSummary, displayableCandidates,
@@ -18,6 +19,10 @@ import {
 } from '../src/lib/musttry.js';
 import { sourceRecommendsBottle, verifiedCandidates } from '../supabase/functions/_shared/musttry-verify.js';
 import { RESEARCH_TIMEOUT_MS } from '../src/lib/answerflow.js';
+
+const mustTryScreenSource = readFileSync(new URL('../src/components/musttry.jsx', import.meta.url), 'utf8');
+const mainSource = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8');
+const mustTryFunctionSource = readFileSync(new URL('../supabase/functions/must-try/index.ts', import.meta.url), 'utf8');
 
 function ratedWine(i, over = {}){
   return {
@@ -32,6 +37,13 @@ const CELLAR = [0,1,2,3,4,5].map(i=>ratedWine(i));
 test('Must Try allows time for both web research and bottle verification', () => {
   assert.ok(MUST_TRY_RESEARCH_TIMEOUT_MS > RESEARCH_TIMEOUT_MS);
   assert.ok(MUST_TRY_RESEARCH_TIMEOUT_MS <= 60_000, 'the longer request remains bounded');
+});
+
+test('Find a bottle stays in the dedicated Must Try verification flow', () => {
+  assert.match(mustTryScreenSource, /invokeAI\('must-try',\s*\{[\s\S]*?focus:experience\.query/);
+  assert.doesNotMatch(mainSource, /<MustTryScreen[^>]*onFindBottle=\{ask\}/);
+  assert.match(mustTryFunctionSource, /researchCandidates\(profile, focus\)/);
+  assert.match(mustTryFunctionSource, /SELECTED WINE EXPERIENCE: \$\{focus\}/);
 });
 
 test('the durable roadmap contains source-backed experiences, not generic favorite grapes', () => {

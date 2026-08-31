@@ -19,9 +19,7 @@ import { invokeAI } from '../lib/ai.js';
 import { track } from '../lib/analytics.js';
 import { PurchaseTypeSheet } from './wishlist.jsx';
 
-const { useState: mUS, useEffect: mUE, useRef: mUR, useMemo: mUM } = React;
-
-function ExperienceCard({ experience, onFind }){
+function ExperienceCard({ experience, onFind, searching }){
   return (
     <div style={{ border:`1px solid ${T.line}`, borderRadius:14, background:'#fff', padding:'14px 15px', marginBottom:10 }}>
       <div style={{ fontSize:17, fontWeight:740, color:T.ink, letterSpacing:-0.35, lineHeight:1.2 }}>{experience.title}</div>
@@ -34,7 +32,7 @@ function ExperienceCard({ experience, onFind }){
       <div style={{ display:'flex', flexWrap:'wrap', gap:'4px 10px', marginTop:9 }}>
         {experience.sources.map((source)=><a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer" style={{ fontSize:11.5, color:T.ink3 }}>{source.title}</a>)}
       </div>
-      <button onClick={()=>onFind(experience)} style={{ marginTop:11, width:'100%', padding:'11px 12px', borderRadius:11, border:`1px solid ${T.ink}`, background:T.ink, color:'#fff', fontFamily:'var(--sans)', fontSize:13.5, fontWeight:690, cursor:'pointer' }}>Find a bottle</button>
+      <button disabled={searching} onClick={()=>onFind(experience)} style={{ marginTop:11, width:'100%', padding:'11px 12px', borderRadius:11, border:`1px solid ${T.ink}`, background:T.ink, color:'#fff', fontFamily:'var(--sans)', fontSize:13.5, fontWeight:690, cursor:searching?'default':'pointer', opacity:searching?0.65:1 }}>{searching?'Finding a bottle…':'Find a bottle'}</button>
     </div>
   );
 }
@@ -45,13 +43,13 @@ const EXPERIENCE_SECTION_COPY = {
   branch:{ title:'Worth branching out for', subtitle:'Distinctive styles that expand your range without being random.' },
 };
 
-function ExperienceSection({ kind, experiences, onFind }){
+function ExperienceSection({ kind, experiences, onFind, searchingId }){
   if (!experiences.length) return null;
   const copy = EXPERIENCE_SECTION_COPY[kind];
   return <section style={{ marginTop:kind==='palate'?8:24 }}>
     <div style={{ fontFamily:'var(--serif)', fontSize:22, color:T.ink }}>{copy.title}</div>
     <div style={{ fontSize:12.5, color:T.ink3, lineHeight:1.45, margin:'3px 0 11px' }}>{copy.subtitle}</div>
-    {experiences.map((experience)=><ExperienceCard key={experience.id} experience={experience} onFind={onFind}/>)}
+    {experiences.map((experience)=><ExperienceCard key={experience.id} experience={experience} onFind={onFind} searching={searchingId===experience.id}/>)}
   </section>;
 }
 
@@ -100,44 +98,55 @@ function BottleSection({ kind, candidates, onSave, onBuy, onDismiss, saved }){
 }
 
 // research: idle | searching | done | none  (none/failed render the same quiet line)
-function MustTryScreen({ wines, userId, onClose, onToast, onPurchased, onFindBottle }){
-  const guidance = mUM(()=> mustTryGuidance(wines), [wines]);
-  const experiences = mUM(()=> mustTryExperiences(wines), [wines]);
-  const [candidates, setCandidates] = mUS([]);
-  const [research, setResearch] = mUS('idle');
-  const [researchMessage, setResearchMessage] = mUS('');
-  const [saved, setSaved] = mUS({});          // candidateKey -> 'saved'
-  const [dismissed, setDismissed] = mUS(null); // loaded on mount (storage is not render-safe)
-  const [pendingBuy, setPendingBuy] = mUS(null);
-  const ran = mUR(false);
+function MustTryScreen({ wines, userId, onClose, onToast, onPurchased }){
+  const guidance = React.useMemo(()=> mustTryGuidance(wines), [wines]);
+  const experiences = React.useMemo(()=> mustTryExperiences(wines), [wines]);
+  const [candidates, setCandidates] = React.useState([]);
+  const [research, setResearch] = React.useState('idle');
+  const [researchMessage, setResearchMessage] = React.useState('');
+  const [saved, setSaved] = React.useState({});          // candidateKey -> 'saved'
+  const [dismissed, setDismissed] = React.useState(()=>readDismissed(userId));
+  const [pendingBuy, setPendingBuy] = React.useState(null);
+  const [selectedExperience, setSelectedExperience] = React.useState(null);
+  const researchRun = React.useRef(0);
+  const mounted = React.useRef(true);
+  const resultsRef = React.useRef(null);
 
-  mUE(()=>{
-    if (ran.current) return; ran.current = true;
-    setDismissed(readDismissed(userId));
-    const taste = tasteSummary(wines);
-    if (!supabase){ setResearch('none'); return; }
-    let on = true;
-    setResearch('searching');
-    const slowTimer = setTimeout(()=>{ if (on) setResearch('searching-slow'); }, 8_000);
-    (async()=>{
-      try {
-        const r = await withTimeout(invokeAI('must-try', { taste }), MUST_TRY_RESEARCH_TIMEOUT_MS);
-        clearTimeout(slowTimer);
-        const ok = displayableCandidates(r);
-        if (!on) return;
-        setCandidates(ok);
-        setResearch(ok.length ? 'done' : (r?.researchStatus === 'unavailable' ? 'unavailable' : 'none'));
-      } catch(e){
-        clearTimeout(slowTimer);
-        if (!(e && (e.timeout || e.blocked))) console.error('must-try research failed', e);
-        if (on){
-          setResearchMessage(e?.message || '');
-          setResearch(e?.blocked ? 'blocked' : (e?.timeout ? 'timeout' : 'unavailable'));
-        }
-      }
-    })();
-    return ()=>{ on = false; clearTimeout(slowTimer); };
+  React.useEffect(()=>{
+    mounted.current = true;
+    return ()=>{ mounted.current = false; };
   }, []);
+
+  const findBottle = async (experience)=>{
+    const token = ++researchRun.current;
+    setSelectedExperience(experience);
+    setCandidates([]);
+    setResearchMessage('');
+    track('musttry_find_bottle', { experience:experience.id });
+    if (!supabase){ setResearch('unavailable'); return; }
+    setResearch('searching');
+    const slowTimer = setTimeout(()=>{
+      if (token===researchRun.current && mounted.current) setResearch('searching-slow');
+    }, 8_000);
+    try {
+      const r = await withTimeout(invokeAI('must-try', {
+        taste:tasteSummary(wines), focus:experience.query,
+      }), MUST_TRY_RESEARCH_TIMEOUT_MS);
+      clearTimeout(slowTimer);
+      if (token!==researchRun.current || !mounted.current) return;
+      const ok = displayableCandidates(r);
+      setCandidates(ok);
+      setResearch(ok.length ? 'done' : (r?.researchStatus === 'unavailable' ? 'unavailable' : 'none'));
+      setTimeout(()=>resultsRef.current?.scrollIntoView({ behavior:'smooth', block:'start' }), 0);
+    } catch(e){
+      clearTimeout(slowTimer);
+      if (token!==researchRun.current || !mounted.current) return;
+      if (!(e && (e.timeout || e.blocked))) console.error('must-try research failed', e);
+      setResearchMessage(e?.message || '');
+      setResearch(e?.blocked ? 'blocked' : (e?.timeout ? 'timeout' : 'unavailable'));
+      setTimeout(()=>resultsRef.current?.scrollIntoView({ behavior:'smooth', block:'start' }), 0);
+    }
+  };
 
   const visible = withoutDismissed(candidates, dismissed);
   const grouped = groupedCandidates(visible, guidance.personalized);
@@ -145,11 +154,6 @@ function MustTryScreen({ wines, userId, onClose, onToast, onPurchased, onFindBot
     palate:guidance.personalized ? experiences.filter(e=>e.category==='palate') : [],
     essential:experiences.filter(e=>e.category==='essential'),
     branch:experiences.filter(e=>e.category==='branch'),
-  };
-
-  const findBottle = (experience)=>{
-    track('musttry_find_bottle', { experience:experience.id });
-    if (onFindBottle) onFindBottle(experience.query);
   };
 
   const dismiss = (c)=>{
@@ -226,14 +230,15 @@ function MustTryScreen({ wines, userId, onClose, onToast, onPurchased, onFindBot
             : <>A source-backed roadmap of regions and styles worth experiencing. Rate {PERSONAL_MIN} wines to add recommendations for your palate.</>}
         </div>
 
-        <ExperienceSection kind="palate" experiences={experienceGroups.palate} onFind={findBottle}/>
-        <ExperienceSection kind="essential" experiences={experienceGroups.essential} onFind={findBottle}/>
-        <ExperienceSection kind="branch" experiences={experienceGroups.branch} onFind={findBottle}/>
+        <ExperienceSection kind="palate" experiences={experienceGroups.palate} onFind={findBottle} searchingId={research.startsWith('searching')?selectedExperience?.id:null}/>
+        <ExperienceSection kind="essential" experiences={experienceGroups.essential} onFind={findBottle} searchingId={research.startsWith('searching')?selectedExperience?.id:null}/>
+        <ExperienceSection kind="branch" experiences={experienceGroups.branch} onFind={findBottle} searchingId={research.startsWith('searching')?selectedExperience?.id:null}/>
 
-        <section style={{ marginTop:28, paddingTop:20, borderTop:`1px solid ${T.line}` }}>
-          <div style={{ fontFamily:'var(--serif)', fontSize:21, color:T.ink }}>Verified bottle examples</div>
-          <div style={{ fontSize:12.5, color:T.ink3, lineHeight:1.45, marginTop:3 }}>Shown only when public evidence verifies the exact bottle. Choose Find a bottle above whenever you want a fresh search.</div>
-        </section>
+        {selectedExperience && <div ref={resultsRef} style={{ scrollMarginTop:12 }}>
+          <section style={{ marginTop:28, paddingTop:20, borderTop:`1px solid ${T.line}` }}>
+            <div style={{ fontFamily:'var(--serif)', fontSize:21, color:T.ink }}>Bottle examples for {selectedExperience.title}</div>
+            <div style={{ fontSize:12.5, color:T.ink3, lineHeight:1.45, marginTop:3 }}>Shown only when public evidence verifies the exact bottle.</div>
+          </section>
 
         {/* The verified, actually-recommended bottle layer. */}
         {(research==='searching' || research==='searching-slow') && <div style={{ marginTop:16, display:'flex', alignItems:'center', gap:8 }}>
@@ -259,6 +264,7 @@ function MustTryScreen({ wines, userId, onClose, onToast, onPurchased, onFindBot
         </div>}
         {research==='done' && visible.length===0 && <div style={{ marginTop:16, fontSize:12.5, color:T.ink4, lineHeight:1.5 }}>
           You’ve passed on today’s verified bottle examples.
+        </div>}
         </div>}
 
       </div>

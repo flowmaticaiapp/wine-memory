@@ -68,9 +68,10 @@ function anthropicHeaders(): Record<string, string> {
   };
 }
 
-async function researchCandidates(taste: string): Promise<{ evidence: Evidence[]; status: "researched" | "no_evidence" | "unavailable" }> {
+async function researchCandidates(taste: string, focus = ""): Promise<{ evidence: Evidence[]; status: "researched" | "no_evidence" | "unavailable" }> {
   const prompt =
     `Research SPECIFIC bottles that credible sommeliers, wine educators, respected wine publications, or credible wine-lover editorial lists call must-try, essential, benchmark, iconic, a top pick, or worth seeking.\n\n` +
+    (focus ? `The user selected this wine experience: ${focus}\n\nConcentrate the search on that experience; do not fill the response with unrelated categories.\n\n` : "") +
     `Taste profile: ${taste}\n\n` +
     `You MUST perform web search. Search narrowly and cite every factual research note. ` +
     `Formulate search terms only from grape, region, style, vintage, critic, and budget concepts. Never put a person's name, address, email, account detail, private note, or cellar contents into a search query. ` +
@@ -144,9 +145,10 @@ Deno.serve(async (req) => {
     // user's REAL palate data (samples already excluded there): grapes,
     // regions, traits, budget. Plain text, length-capped, no identity.
     const taste = typeof body.taste === "string" ? body.taste.trim().slice(0, 400) : "";
+    const focus = typeof body.focus === "string" ? body.focus.trim().slice(0, 500) : "";
     const profile = taste.length >= 3 ? taste : "No personal taste profile yet; build a balanced introductory list.";
 
-    const research = await researchCandidates(profile);
+    const research = await researchCandidates(profile, focus);
     if (!research.evidence.length) {
       // Nothing cited — nothing can verify, so don't ask the model to try.
       return json({ candidates: [], researchStatus: research.status });
@@ -167,7 +169,8 @@ Deno.serve(async (req) => {
       `Include price, merchant and priceSourceId ONLY when a registry entry from a merchant currently lists that exact bottle and vintage at that price. ` +
       `An empty candidates list is a correct answer when nothing verifies.\n\n` +
       `EVIDENCE REGISTRY:\n${evidenceText}\n\n` +
-      `TASTE PROFILE: ${profile}`;
+      `TASTE PROFILE: ${profile}\n` +
+      (focus ? `SELECTED WINE EXPERIENCE: ${focus}` : "");
 
     const callClaude = (withEffort: boolean): Promise<Response> => {
       const output_config: Record<string, unknown> = { format: { type: "json_schema", schema: SCHEMA } };
