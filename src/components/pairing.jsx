@@ -14,11 +14,19 @@ import { personalWines } from '../lib/palate.js';
 import { DISH_RULES, DEFAULT_RULE, priceLimit, isPairingQuery, heuristicPairing, pairingHeadline } from '../lib/pairingrules.js';
 import { textMatchesAnyGrape } from '../lib/grapes.js';
 import { readLastAnswer, writeLastAnswer } from '../lib/lastanswer.js';
+import { withTimeout, instantPairing, reconcileEnrichment, enrichmentDisposition, pairingBasis } from '../lib/answerflow.js';
 import { supabase } from '../lib/supabase.js';
 import { invokeAI } from '../lib/ai.js';
 import { track } from '../lib/analytics.js';
 
 const { useState: pUS, useEffect: pUE, useRef: pUR } = React;
+
+// Every run gets a token from this monotonic counter. A research response may
+// only touch the screen while its token is still the latest — a late response
+// for a question the user has moved past can at most upgrade the cache for
+// that same question. Module scope (only one PairingSearch exists at a time)
+// so it also survives the component unmounting while research is in flight.
+let runCounter = 0;
 
 const EXAMPLES = [
   'What should I drink with pesto pasta?',
@@ -194,14 +202,64 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     setPhase(d.mode==='pairing' ? 'pairing' : 'answer');
   }, []);
 
-  const remember = (d, question)=> writeLastAnswer(userId, question, d);
+  // `pendingResearch` is a live-screen state, not an answer property — a
+  // restored answer must never come back with a spinner that nothing will
+  // ever resolve.
+  const remember = (d, question)=> writeLastAnswer(userId, question, { ...d, pendingResearch:false });
+
+  // Background enrichment for an instant rule answer. Runs AFTER the useful
+  // answer is already on screen; the user can leave, refine, or act on it.
+  // Reconciliation (lib/answerflow.js) decides what a late response may
+  // change; the run token decides whether it may touch the screen at all.
+  const enrich = async (Q, initial, token)=>{
+    let rec = { accepted:false };
+    try {
+      if (!supabase) throw new Error('not configured');
+      const r = await withTimeout(askSommelier(Q, wines));
+      rec = reconcileEnrichment(initial, r);
+    } catch(e){
+      // Timeout, network, or an unusable response: the rule answer stands and
+      // its basis line already tells the truth (built-in guidance, no source).
+      if (!(e && (e.timeout || e.blocked))) console.error('research enrichment failed', e);
+    }
+    const cached = readLastAnswer(userId);
+    const where = enrichmentDisposition({
+      isCurrentRun: token === runCounter,
+      accepted: rec.accepted, asked: Q, cachedAsked: cached ? cached.asked : null,
+    });
+    if (where === 'discard') return;
+    const final = rec.accepted
+      ? { ...rec.data, owned: ownedMatches(rec.data, wines) }
+      : { ...initial, pendingResearch:false };
+    if (where === 'cache_only'){ if (rec.accepted) remember(final, Q); return; }
+    remember(final, Q);
+    setData(final);
+  };
 
   const run = async (query)=>{
     const Q = (query!=null?query:q).trim(); if(!Q) return;
-    setAsked(Q); setQ(Q); setPhase('thinking'); track('sommelier_question');
+    const token = ++runCounter;
+    setAsked(Q); setQ(Q); track('sommelier_question');
+
+    // A KNOWN food-pairing request (a reviewed dish rule matches) renders the
+    // built-in guidance immediately — local data, no network in the way — and
+    // researches in the background. Everything else keeps research-first
+    // waiting: exact bottles, vintages, critics, prices and open questions
+    // cannot be answered honestly without evidence, so they earn the spinner —
+    // now behind a firm timeout so it can never spin indefinitely.
+    const h = heuristicPairing(Q);
+    if (h.matched){
+      const initial = { ...instantPairing(h), owned: ownedMatches(h, wines) };
+      setData(initial); remember(initial, Q); setPhase('pairing');
+      enrich(Q, initial, token);
+      return;
+    }
+
+    setPhase('thinking');
     try {
       if (!supabase) throw new Error('not configured');
-      const r = await askSommelier(Q, wines);   // model classifies pairing vs. answer
+      const r = await withTimeout(askSommelier(Q, wines));   // model classifies pairing vs. answer
+      if (token !== runCounter) return;                     // superseded while waiting
       if (r && r.kind==='pairing' && r.primary){
         const out = { dish:r.dish||Q, primary:r.primary, others:r.others||[], avoid:[], avoidNote:r.avoidNote||'',
           sources:r.sources||[], researchStatus:r.researchStatus||'no_evidence', limit:priceLimit(Q) };
@@ -217,13 +275,13 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
         const err = new Error('empty sommelier result'); err.unusable = true; throw err;
       }
     } catch(e){
+      if (token !== runCounter) return;                     // superseded while waiting
       console.error('sommelier failed', e);
       // Graceful fallback: pairing questions still get a useful answer. Track
       // WHY we fell back so the disclosure tells the truth — "unavailable" and
       // "answered, but unusably" are different things and the banner says which.
       if (isPairingQuery(Q)){
-        const out = heuristicPairing(Q);
-        const d = { mode:'pairing', ...out, owned:ownedMatches(out, wines),
+        const d = { mode:'pairing', ...h, owned:ownedMatches(h, wines),
           offline:true, offlineReason: e && e.unusable ? 'unusable' : 'unreachable' };
         setData(d); remember(d, Q);
         setPhase('pairing');
@@ -345,6 +403,14 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
 
           <AvoidNote text={data.avoidNote}/>
 
+          {/* Quiet enrichment status: the answer above is already complete and
+              usable; this only says research is still looking for supporting
+              sources. It resolves silently — never into a different answer. */}
+          {data.pendingResearch && <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:8 }}>
+            <Spinner size={13} stroke={2}/>
+            <span style={{ fontSize:11.5, color:T.ink4 }}>Checking public wine sources…</span>
+          </div>}
+
           {/* In your cellar — kept visually distinct from what to buy */}
           <div style={{ marginTop:20, paddingTop:18, borderTop:`2px solid ${T.line2}` }}>
             <div style={{ display:'flex', alignItems:'baseline', gap:9, marginBottom:11 }}>
@@ -383,7 +449,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
               <div style={{ fontSize:15.5, fontWeight:720, letterSpacing:-0.3, marginBottom:2 }}>How the alternatives differ</div>
               {data.others.slice(0,2).map((o,i)=> <StyleNote key={i} grape={o.grape} why={o.why} direction={o.direction}/>)}
             </div>}
-            <BasisLine basis={data.offline ? (data.offlineReason || 'unreachable') : ((data.sources||[]).length ? 'researched' : (data.researchStatus||'no_evidence'))} sources={data.sources}/>
+            <BasisLine basis={pairingBasis(data)} sources={data.sources}/>
           </div>}
 
           {/* learning */}

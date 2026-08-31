@@ -3,6 +3,7 @@
 // so queries never need an explicit user filter.
 import { supabase } from './supabase.js';
 import { STORAGE_PREFIX, PHOTO_URL_TTL_SECONDS, storagePath } from './photopath.js';
+import { WISHLIST_COLS, rowToItem as wishlistRowToItem, itemToRow as wishlistItemToRow } from './wishlist.js';
 
 export { storagePath };
 
@@ -141,6 +142,39 @@ export async function insertPairing(userId, p){
   const { data, error } = await supabase.from('pairings').insert(row).select('*').single();
   if (error) throw error;
   return rowToPairing(data);
+}
+
+// ── wishlist — bottles the user does NOT own ────────────────────────
+// A separate table by design (see supabase/migrations/20260830000000_wishlist.sql):
+// nothing here can enter cellar counts or palate calculations, because those
+// read the wines table. Shapes and rules live in lib/wishlist.js (pure).
+export async function fetchWishlist(){
+  const { data, error } = await supabase.from('wishlist')
+    .select(WISHLIST_COLS).eq('status', 'active').order('created_at', { ascending: false });
+  if (error) throw error;
+  return data.map(wishlistRowToItem);
+}
+
+export async function insertWishlistItem(item){
+  const { data, error } = await supabase.from('wishlist')
+    .insert(wishlistItemToRow(item)).select(WISHLIST_COLS).single();
+  if (error) throw error;
+  return wishlistRowToItem(data);
+}
+
+export async function removeWishlistItem(id){
+  const { error } = await supabase.from('wishlist').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// Marks the item bought and records which cellar wine it became. The caller
+// inserts the cellar wine FIRST (through insertWine) so a failure here never
+// loses the bottle the user just bought.
+export async function markWishlistBought(id, wineId){
+  const { error } = await supabase.from('wishlist')
+    .update({ status: 'bought', bought_wine_id: wineId ?? null, resolved_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
 }
 
 // ── dining experiences ──────────────────────────────────────────────

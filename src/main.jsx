@@ -19,6 +19,9 @@ import { Onboarding } from './components/Onboarding.jsx';
 import { FirstSuccess } from './components/FirstSuccess.jsx';
 import { PairingSearch } from './components/pairing.jsx';
 import { PairingHome } from './components/pairinghome.jsx';
+import { WishlistScreen } from './components/wishlist.jsx';
+import { MustTryScreen } from './components/musttry.jsx';
+import { FavoritesComing } from './components/favorites.jsx';
 import { DiningOut } from './components/diningout.jsx';
 import { LearnReader } from './components/TodaysPour.jsx';
 import { supabase, supabaseConfigured } from './lib/supabase.js';
@@ -170,6 +173,10 @@ function VApp({ session }){
     else { flash('Added to your collection'); if(!saved.photo) setPhotoNudge(saved); }
   }catch(e){ console.error(e); flash('Could not save'); } };
   const addMany=async(arr)=>{ const saved=await db.insertWines(userId, arr); setWines(ws=>[...saved,...ws]); return saved; };
+  // "I bought this" on a Wishlist item: a real cellar insert through the
+  // normal path (so the wine is genuine user data), without closing the
+  // Wishlist screen the user is standing in.
+  const addWineFromWishlist=async(w)=>{ const saved=await db.insertWine(userId, w); setWines(ws=>[saved,...ws]); track('wine_added', { source:'wishlist' }); return saved; };
   const viewToTry=()=>{ setOverlay(null); setTab('collection'); setFilter('totry'); };
   const clearSamples=async()=>{ try{ await db.deleteSamples(); setWines(ws=>ws.filter(w=>!w.sample)); }catch(e){ console.error(e); } };
   const ask=(q)=>{ setSeed(q||''); setOverlay('search'); };
@@ -180,7 +187,7 @@ function VApp({ session }){
 
   const navTo=(t)=>{ setOverlay(null); setTab(t); };
   const detail = (overlay&&overlay.detail&&wines)? wines.find(w=>w.id===overlay.detail):null;
-  const fullPanel = ['searchadd','import','search','diningout','snap','pour','pairinghome','menu'].includes(overlay);
+  const fullPanel = ['searchadd','import','search','diningout','snap','pour','pairinghome','menu','wishlist','musttry','favorites'].includes(overlay);
   const hasSamples = wines? wines.some(w=>w.sample) : false;
   // The palate gate must count the SAME wines the palate engine will use.
   // Counting samples here would open the portrait on demo bottles and then hand
@@ -191,7 +198,7 @@ function VApp({ session }){
     <div style={{ position:'relative', height:'100%', width:'100%', background:'#fff', overflow:'hidden' }}>
       {loading && <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}><svg width={30} height={30} viewBox="0 0 24 24" style={{ animation:'wmSpin .8s linear infinite' }}><circle cx="12" cy="12" r="9" fill="none" stroke={T.line2} strokeWidth="2.6"/><path d="M21 12a9 9 0 00-9-9" fill="none" stroke={T.ink} strokeWidth="2.6" strokeLinecap="round"/></svg></div>}
       {!loading && <>
-      {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onMenu={()=>setOverlay('menu')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')} onFavorites={()=>{setTab('collection');setFilter('buy')}} onWishlist={()=>{setTab('collection');setFilter('totry')}} onMustTry={()=>ask('Based on my palate, what wine styles, grapes, or regions should I try next?')} onPairings={()=>setOverlay('pairinghome')}/>}
+      {tab==='home' && <HomeScreen wines={wines} onAsk={ask} onMenu={()=>setOverlay('menu')} onOpenWine={(id)=>setOverlay({detail:id})} onCollection={()=>setTab('collection')} onFavorites={()=>setOverlay('favorites')} onWishlist={()=>setOverlay('wishlist')} onMustTry={()=>setOverlay('musttry')} onPairings={()=>setOverlay('pairinghome')}/>}
       {tab==='collection' && <Collection wines={wines} cols={cols} filter={filter} setFilter={setFilter} hasSamples={hasSamples} onClearSamples={clearSamples} onOpen={(id)=>setOverlay({detail:id})} onSearch={()=>ask('')}/>}
       {tab==='palate' && (palateCount < 5
         ? <PalatePlaceholder count={palateCount} onAdd={()=>setOverlay('addhub')} onExplore={()=>setTab('learn')} onLearn={()=>setOverlay('pour')}/>
@@ -207,9 +214,12 @@ function VApp({ session }){
       {overlay==='import' && <OrderImport onClose={()=>setOverlay(null)} onAddMany={addMany} onViewToTry={viewToTry}/>}
       {overlay==='search' && <PairingSearch wines={wines} userId={userId} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
       {overlay==='pairinghome' && <PairingHome onBack={()=>setOverlay(null)} onMenu={()=>setOverlay('menu')} onAsk={ask}/>}
+      {overlay==='wishlist' && <WishlistScreen onClose={()=>setOverlay(null)} onAddToCellar={addWineFromWishlist} onToast={flash}/>}
+      {overlay==='musttry' && <MustTryScreen wines={wines} userId={userId} onClose={()=>setOverlay(null)} onToast={flash}/>}
+      {overlay==='favorites' && <FavoritesComing onClose={()=>setOverlay(null)} onBuyAgain={()=>{ setOverlay(null); setTab('collection'); setFilter('buy'); }}/>}
       {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining} recent={dining}/>}
       {overlay==='pour' && <LearnReader onClose={()=>setOverlay(null)} onExplore={()=>{ setOverlay(null); setTab('learn'); }}/>}
-      {overlay==='menu' && <NavigationDrawer email={session.user.email} userId={userId} onClose={()=>setOverlay(null)} go={(id)=>{ if(id==='pairings')setOverlay('pairinghome'); else if(id==='tonight')ask('What should I open tonight?'); else if(id==='diningout')setOverlay('diningout'); else if(id==='addhub')setOverlay('addhub'); else if(id==='favorites'){setOverlay(null);setTab('collection');setFilter('buy')} else if(id==='wishlist'){setOverlay(null);setTab('collection');setFilter('totry')} else if(id==='musttry')ask('Based on my palate, what wine styles, grapes, or regions should I try next?'); else {setOverlay(null);setTab(id)}}}/>}
+      {overlay==='menu' && <NavigationDrawer email={session.user.email} userId={userId} onClose={()=>setOverlay(null)} go={(id)=>{ if(id==='pairings')setOverlay('pairinghome'); else if(id==='tonight')ask('What should I open tonight?'); else if(id==='diningout')setOverlay('diningout'); else if(id==='addhub')setOverlay('addhub'); else if(id==='favorites')setOverlay('favorites'); else if(id==='wishlist')setOverlay('wishlist'); else if(id==='musttry')setOverlay('musttry'); else {setOverlay(null);setTab(id)}}}/>}
       {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} onAddPhoto={addPhoto} verdictVariant={t.verdictStyle}/>}
 
       {onboarding && wines.length===0 && <Onboarding onSnap={()=>{ finishOnboarding(); setOverlay('snap'); }} onSkip={finishOnboarding}/>}
