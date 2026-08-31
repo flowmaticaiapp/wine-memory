@@ -45,13 +45,14 @@ test('a known pairing question yields an instant, useful rule answer', () => {
   assert.equal(INSTANT.pendingResearch, true, 'research is still running behind it');
 });
 
-test('EVERY pairing question renders instantly — matched rule or versatile fallback', () => {
+test('food pairings render instantly, but an ambiguous tonight decision never does', () => {
   // Matched dish rules.
   assert.equal(instantEligible('steak with mushroom sauce'), true);
   assert.equal(instantEligible('spicy tomato pasta'), true);
   // Pairing questions no rule recognises still render instantly — the honest
   // versatile card, then research enriches or corrects.
-  assert.equal(instantEligible('What should I open tonight?'), true);
+  assert.equal(instantEligible('What should I open tonight?'), false, 'the guided cellar flow must ask before recommending');
+  assert.equal(instantEligible('What should I open with steak and mushroom sauce tonight?'), true, 'specific context needs no extra questions');
   assert.equal(instantEligible('What should I bring to a dinner party?'), true);
   assert.equal(instantEligible('what goes with pierogi casserole?'), true);
   // And the versatile instant answer presents itself honestly.

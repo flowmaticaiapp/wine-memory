@@ -37,16 +37,16 @@
 //      kept, and its avoid note survives unless research brought its own.
 
 import { textMatchesAnyGrape } from './grapes.js';
-import { isPairingQuery } from './pairingrules.js';
+import { isPairingQuery, hasSpecificFoodContext } from './pairingrules.js';
+import { needsTonightGuidance } from './tonight.js';
 
 // The gate the UI uses to choose between the instant path and research-first
-// waiting. EVERY question isPairingQuery() identifies renders immediately —
-// the matched dish rule when one fires, the honest versatile fallback
-// otherwise. Kept here, not inline in the component, so the gate itself is
-// under test: an earlier draft quietly narrowed it to matched rules only,
-// which no test could see.
+// waiting. Food questions render immediately, including honest unmatched-food
+// fallbacks. An ambiguous "open tonight" request is the deliberate exception:
+// it enters the guided cellar flow before any recommendation appears.
 export function instantEligible(query){
-  return isPairingQuery(String(query ?? ''));
+  const q = String(query ?? '');
+  return isPairingQuery(q) && !needsTonightGuidance(q, hasSpecificFoodContext(q));
 }
 
 // Firm ceiling on any research round-trip. Background enrichment that misses
@@ -141,6 +141,10 @@ export function reconcileEnrichment(initial, researched){
     researchStatus: r.researchStatus || (sources.length ? 'researched' : 'no_evidence'),
     limit: initial.limit ?? null,
     matched: ruleMatched ? true : initial.matched,
+    guidedTonight: !!initial.guidedTonight,
+    guidedMood: initial.guidedMood || null,
+    tonightMeal: initial.tonightMeal || '',
+    tonightReason: initial.tonightReason || '',
     enriched: true,
     pendingResearch: false,
   };

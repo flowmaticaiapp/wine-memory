@@ -99,7 +99,12 @@ function priceLimit(q){ const m=q.match(/under\s*\$?(\d+)|below\s*\$?(\d+)|\$(\d
 // meal, occasion, or pairing signal appears alongside it.
 const PAIRING_LANGUAGE = /\bpair\w*\b|\bgo(?:es)?\s+with\b|\bserve\s+with\b|\bdrink\s+with\b|\bhave\s+with\b|\bmatch\w*\s+with\b|\bwine\s+(?:for|with)\b|\bwhat\s+(?:should\s+i|to)\s+(?:drink|open|pour|serve)\b/i;
 const FOOD_WORDS = /\bpasta\b|\bpizza\b|\bsteak\b|\bbeef\b|\bribeye\b|\bchicken\b|\bpoultry\b|\bturkey\b|\bpork\b|\blamb\b|\bbrisket\b|\bfish\b|\bseafood\b|\bshellfish\b|\boysters?\b|\bsushi\b|\bshrimp\b|\bprawns?\b|\bcrab\b|\blobster\b|\bscallops?\b|\bcheese\b|\bcharcuterie\b|\bsalad\b|\bvegetables?\b|\bveggies?\b|\bmushrooms?\b|\brisotto\b|\bcurry\b|\btacos?\b|\bburgers?\b|\bbbq\b|\bbarbecue\b|\bcasserole\b|\bsoup\b|\bstew\b|\broast\b|\bgrill(?:ed|ing)?\b|\bdessert\b|\bchocolate\b|\bappetizers?\b|\bsnacks?\b|\bsauce\b|\beat(?:ing)?\b|\bmeals?\b|\bdish(?:es)?\b|\bfood\b|\bdinner\b|\blunch\b|\bbrunch\b|\bcooking\b|\brecipe\b/i;
+const SPECIFIC_FOOD_WORDS = /\bpasta\b|\bpizza\b|\bsteak\b|\bbeef\b|\bribeye\b|\bchicken\b|\bpoultry\b|\bturkey\b|\bpork\b|\blamb\b|\bbrisket\b|\bfish\b|\bseafood\b|\bshellfish\b|\boysters?\b|\bsushi\b|\bshrimp\b|\bprawns?\b|\bcrab\b|\blobster\b|\bscallops?\b|\bcheese\b|\bcharcuterie\b|\bsalad\b|\bvegetables?\b|\bveggies?\b|\bmushrooms?\b|\brisotto\b|\bcurry\b|\btacos?\b|\bburgers?\b|\bbbq\b|\bbarbecue\b|\bcasserole\b|\bsoup\b|\bstew\b|\broast\b|\bgrill(?:ed|ing)?\b|\bdessert\b|\bchocolate\b|\bappetizers?\b|\bsnacks?\b|\bsauce\b|\brecipe\b/i;
 const OCCASIONS = /\btonight\b|\bdinner\s+party\b|\bpotluck\b|\bthanksgiving\b|\bbring\s+to\b|\bdate\s+night\b|\bweeknight\b|\bholiday\s+meal\b|\bcookout\b/i;
+const hasSpecificFoodContext = (q)=>{
+  const s = String(q ?? '');
+  return DISH_RULES.some(r=>r.re.test(s)) || SPECIFIC_FOOD_WORDS.test(s);
+};
 const isPairingQuery = (q)=>{
   const s = String(q ?? '');
   if (!s.trim()) return false;
@@ -130,4 +135,4 @@ function pairingHeadline(result){
   return result && result.dish ? 'For ' + result.dish : '';
 }
 
-export { DISH_RULES, DEFAULT_RULE, priceLimit, isPairingQuery, heuristicPairing, pairingHeadline };
+export { DISH_RULES, DEFAULT_RULE, priceLimit, isPairingQuery, hasSpecificFoodContext, heuristicPairing, pairingHeadline };

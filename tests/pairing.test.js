@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DISH_RULES, DEFAULT_RULE, heuristicPairing, priceLimit, isPairingQuery, pairingHeadline } from '../src/lib/pairingrules.js';
+import { DISH_RULES, DEFAULT_RULE, heuristicPairing, priceLimit, isPairingQuery, hasSpecificFoodContext, pairingHeadline } from '../src/lib/pairingrules.js';
 
 // ── An unmatched dish must not pretend it was understood ────────────
 
@@ -109,6 +109,13 @@ test('genuine food questions keep their instant answer, matched or not', () => {
   // And each of these still reaches heuristicPairing usefully.
   assert.equal(heuristicPairing('what goes with pierogi casserole?').matched, false, 'honest versatile fallback');
   assert.ok(heuristicPairing('what goes with pierogi casserole?').primary.grape);
+});
+
+test('specific food context is distinct from a generic meal occasion', () => {
+  assert.equal(hasSpecificFoodContext('What should I open tonight?'), false);
+  assert.equal(hasSpecificFoodContext('What should I open for dinner?'), false);
+  assert.equal(hasSpecificFoodContext('What should I open with steak and mushroom sauce tonight?'), true);
+  assert.equal(hasSpecificFoodContext('What should I drink with pierogi casserole tonight?'), true);
 });
 
 // ── The pairing-answer standard ─────────────────────────────────────

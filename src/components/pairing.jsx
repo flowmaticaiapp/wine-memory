@@ -11,8 +11,10 @@ import { BottlePhoto, typeHue } from './bottle.jsx';
 import { Spinner } from './add.jsx';
 import { V_STATUS } from '../lib/constants.js';
 import { personalWines } from '../lib/palate.js';
-import { DISH_RULES, DEFAULT_RULE, priceLimit, isPairingQuery, heuristicPairing, pairingHeadline } from '../lib/pairingrules.js';
+import { DISH_RULES, DEFAULT_RULE, priceLimit, isPairingQuery, hasSpecificFoodContext, heuristicPairing, pairingHeadline } from '../lib/pairingrules.js';
 import { textMatchesAnyGrape } from '../lib/grapes.js';
+import { needsTonightGuidance, rankTonightBottles, tonightReason, alternativeDirection } from '../lib/tonight.js';
+import { relevantBuyAgainGrape } from '../lib/pairing-insight.js';
 import { readLastAnswer, writeLastAnswer } from '../lib/lastanswer.js';
 import { withTimeout, instantEligible, instantPairing, reconcileEnrichment, enrichmentDisposition, pairingBasis } from '../lib/answerflow.js';
 import { supabase } from '../lib/supabase.js';
@@ -51,6 +53,38 @@ const REFINEMENTS = [
   ['A bit sweeter', 'slightly sweeter'],
 ];
 
+const TONIGHT_MEALS = [
+  ['Steak','steak'], ['Chicken','chicken'], ['Pasta','pasta'], ['Seafood','seafood'],
+  ['Spicy','spicy food'], ['Cheese','cheese'], ['No food',''], ['Something else',null],
+].map(([label,query])=>({ label, query }));
+const TONIGHT_MOODS = [
+  ['Light & fresh','light','light and fresh'],
+  ['Rich & cozy','rich','rich and cozy'],
+  ['Bold','bold','bold'],
+  ['Something different','different','something different'],
+  ['Decide for me','decide','decide for me'],
+].map(([label,id,query])=>({ label,id,query }));
+
+function TonightChoices({ step, meal, onMeal, onMood }){
+  const choices = step === 'meal' ? TONIGHT_MEALS : TONIGHT_MOODS;
+  return <div style={{ paddingTop:12 }}>
+    <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.maybe, letterSpacing:'.13em', textTransform:'uppercase' }}>
+      {step === 'meal' ? 'One quick question' : meal?.label}
+    </div>
+    <div style={{ fontFamily:'var(--serif)', fontSize:27, color:T.ink, marginTop:7 }}>
+      {step === 'meal' ? 'What are you having?' : 'What sounds good tonight?'}
+    </div>
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:9, marginTop:17 }}>
+      {choices.map((choice)=><button key={choice.label} onClick={()=>step==='meal'?onMeal(choice):onMood(choice)}
+        style={{ minHeight:58, padding:'11px 10px', borderRadius:13, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink,
+          fontFamily:'var(--sans)', fontSize:13.5, fontWeight:630, cursor:'pointer' }}>{choice.label}</button>)}
+    </div>
+    <div style={{ marginTop:15, fontSize:12.5, color:T.ink4, lineHeight:1.45 }}>
+      {step === 'meal' ? 'This keeps the sommelier from guessing before it knows the meal.' : 'Wine Memory will look in your cellar first.'}
+    </div>
+  </div>;
+}
+
 // Build the personalization payload the sommelier function expects.
 // Samples excluded: this payload is sent to the model AS the user's own taste,
 // so a demo bottle here would put words in the user's mouth.
@@ -77,23 +111,16 @@ async function askSommelier(query, wines){
 function grapeFits(wine, targets){
   return textMatchesAnyGrape(wine.grape || wine.name, targets);
 }
-function ownedMatches(result, wines){
+function ownedMatches(result, wines, options = {}){
   const targets = [ ...(result.primary.matchGrapes||[result.primary.grape]), ...((result.others||[]).map(o=>o.grape)) ].filter(Boolean);
   const avoid = (result.avoid||[]).filter(Boolean);
-  let pool = wines.filter(w=> grapeFits(w, targets) && !grapeFits(w, avoid));
+  const mine = personalWines(wines);
+  let pool = options.guidedTonight && result.matched === false
+    ? mine.filter(w=>!grapeFits(w, avoid))
+    : mine.filter(w=> grapeFits(w, targets) && !grapeFits(w, avoid));
   if (result.limit!=null) pool = pool.filter(w=> w.price==null || w.price<=result.limit);
-  const ord = { buy:0, totry:1, maybe:2, no:3 };
-  return pool.sort((a,b)=> (ord[a.verdict]-ord[b.verdict])).slice(0,6);
+  return rankTonightBottles(pool, options.mood, options.guidedTonight ? 3 : 6);
 }
-// Powers the "We're learning your taste" banner — an explicit claim about the
-// user, so samples are excluded.
-function learnInsight(wines){
-  const buys = personalWines(wines).filter(w=>w.verdict==='buy' && w.grape);
-  const tally = {}; buys.forEach(w=>{ tally[w.grape]=(tally[w.grape]||0)+1; });
-  const top = Object.entries(tally).sort((a,b)=>b[1]-a[1])[0];
-  return (top && top[1]>=2) ? top[0] : null;
-}
-
 // ── UI pieces ──
 function OwnedRow({ w, onOpen }){
   return (
@@ -101,7 +128,7 @@ function OwnedRow({ w, onOpen }){
       <BottlePhoto wine={w} w={50} h={62} rounded={9}/>
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ fontFamily:'var(--mono)', fontSize:10, color:T.maybe, letterSpacing:0.25, textTransform:'uppercase' }}>{styleLabel(w)}</div>
-        <div style={{ fontSize:14.5, fontWeight:670, color:T.ink, letterSpacing:-0.2, lineHeight:1.2, marginTop:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{w.name} <span style={{ color:T.ink3, fontWeight:500 }}>{w.vintage}</span></div>
+        <div style={{ fontSize:14.5, fontWeight:670, color:T.ink, letterSpacing:-0.2, lineHeight:1.2, marginTop:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{w.producer ? `${w.producer} ` : ''}{w.name} <span style={{ color:T.ink3, fontWeight:500 }}>{w.vintage}{w.quantity>1?` · ${w.quantity} bottles`:''}</span></div>
         <div style={{ fontSize:12, color:T.ink3, marginTop:2 }}>{w.region}{w.country?', '+w.country:''}</div>
       </div>
       <div style={{ flexShrink:0 }}><VerdictBadge id={w.verdict} variant="expressive" size="sm"/></div>
@@ -180,9 +207,10 @@ function AnswerText({ text }){
 }
 function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePairing }){
   const [q, setQ] = pUS('');
-  const [phase, setPhase] = pUS('idle');   // idle | thinking | pairing | search
+  const [phase, setPhase] = pUS('idle');   // idle | guide-meal | guide-mood | thinking | pairing | search
   const [data, setData] = pUS(null);
   const [asked, setAsked] = pUS('');
+  const [guideMeal, setGuideMeal] = pUS(null);
   const [saved, setSaved] = pUS(false);
   const [showWhy, setShowWhy] = pUS(false);   // depth stays closed by default
   const didInit = pUR(false);
@@ -202,7 +230,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     // Re-match the cellar rather than trusting the stored copy: bottles may
     // have been added, drunk or re-rated since.
     const d = saved.data;
-    setData(d.mode==='pairing' ? { ...d, owned:ownedMatches(d, wines) } : d);
+    setData(d.mode==='pairing' ? { ...d, owned:ownedMatches(d, wines, { guidedTonight:!!d.guidedTonight, mood:d.guidedMood }) } : d);
     setAsked(saved.asked||''); setQ(saved.asked||'');
     setPhase(d.mode==='pairing' ? 'pairing' : 'answer');
   }, []);
@@ -235,7 +263,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     if (where === 'discard') return;
     const final = rec.accepted
       ? (rec.data.mode === 'pairing'
-          ? { ...rec.data, owned: ownedMatches(rec.data, wines) }
+          ? { ...rec.data, owned: ownedMatches(rec.data, wines, { guidedTonight:!!initial.guidedTonight, mood:initial.guidedMood }) }
           : rec.data)                              // mode correction → written answer
       : { ...initial, pendingResearch:false };
     if (where === 'cache_only'){ if (rec.accepted) remember(final, Q); return; }
@@ -245,10 +273,15 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     if (final.mode === 'answer') setPhase('answer');
   };
 
-  const run = async (query)=>{
+  const run = async (query, options = {})=>{
     const Q = (query!=null?query:q).trim(); if(!Q) return;
     const token = ++runCounter;
     setAsked(Q); setQ(Q); track('sommelier_question');
+
+    if (!options.guidedTonight && needsTonightGuidance(Q, hasSpecificFoodContext(Q))){
+      setData(null); setGuideMeal(null); setPhase('guide-meal');
+      return;
+    }
 
     // EVERY food-pairing question renders useful guidance immediately — the
     // matched dish rule when one fires, the honest "versatile starting point"
@@ -259,10 +292,17 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     // evidence, so they earn the spinner — behind a firm timeout so it can
     // never spin indefinitely.
     const h = heuristicPairing(Q);
-    if (instantEligible(Q)){
-      const initial = { ...instantPairing(h), owned: ownedMatches(h, wines) };
+    if (options.guidedTonight || instantEligible(Q)){
+      const owned = ownedMatches(h, wines, { guidedTonight:!!options.guidedTonight, mood:options.mood });
+      const initial = { ...instantPairing(h), owned,
+        guidedTonight:!!options.guidedTonight, guidedMood:options.mood||null,
+        tonightMeal:options.mealLabel||'', tonightReason: options.guidedTonight && owned.length
+          ? `${tonightReason(options.mealLabel||'your evening', options.mood, !!options.hasMeal)}${h.matched ? ` ${h.primary.why}` : ''}` : '' };
       setData(initial); remember(initial, Q); setPhase('pairing');
-      enrich(Q, initial, token);
+      // With no meal there is no pairing claim to research. The answer is a
+      // ranked decision among owned bottles, not a web-generated substitute.
+      if (!options.guidedTonight || h.matched) enrich(Q, initial, token);
+      else { const settled={ ...initial, pendingResearch:false }; setData(settled); remember(settled,Q); }
       return;
     }
 
@@ -302,6 +342,20 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
       }
     }
   };
+
+  const chooseMeal = (meal)=>{
+    if (meal.query === null){
+      setGuideMeal(null); setAsked(''); setQ('What should I open tonight with '); setPhase('idle');
+      return;
+    }
+    setGuideMeal(meal); setPhase('guide-mood');
+  };
+  const chooseMood = (mood)=>{
+    const withMeal = guideMeal?.query ? ` with ${guideMeal.query}` : '';
+    run(`What should I open tonight${withMeal}? I want ${mood.query}.`, {
+      guidedTonight:true, mood:mood.id, mealLabel:guideMeal?.label||'No food', hasMeal:!!guideMeal?.query,
+    });
+  };
   pUE(()=>{ setSaved(false); setShowWhy(false); }, [asked]);
   pUE(()=>{ if(initialQuery && !didInit.current){ didInit.current=true; run(initialQuery); } }, [initialQuery]);
 
@@ -313,7 +367,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     setSaved(true);
   };
 
-  const insightGrape = data && data.mode==='pairing' ? learnInsight(wines) : null;
+  const insightGrape = data && data.mode==='pairing' ? relevantBuyAgainGrape(wines, data) : null;
 
   return (
     <div style={{ position:'absolute', inset:0, zIndex:75, background:'#fff', display:'flex', flexDirection:'column' }}>
@@ -345,6 +399,9 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
           <div style={{ marginTop:18, fontSize:12.5, color:T.ink4, lineHeight:1.5, display:'flex', gap:8 }}><Icon name="sparkle" size={14} color={T.ink4}/> Each answer explains the style and region, then shows the bottles you already own that fit.</div>
         </>}
 
+        {phase==='guide-meal' && <TonightChoices step="meal" meal={guideMeal} onMeal={chooseMeal} onMood={chooseMood}/>}
+        {phase==='guide-mood' && <TonightChoices step="mood" meal={guideMeal} onMeal={chooseMeal} onMood={chooseMood}/>}
+
         {phase==='thinking' && <div style={{ paddingTop:60, display:'flex', flexDirection:'column', alignItems:'center' }}>
           <Spinner size={40} stroke={3}/>
           <div style={{ fontSize:15.5, fontWeight:680, marginTop:18 }}>Thinking it through…</div>
@@ -373,10 +430,27 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
               see what was actually asked. */}
           <div style={{ fontSize:12.5, color:T.ink3, marginBottom:12 }}>You asked <span style={{ color:T.ink2, fontWeight:600 }}>“{asked}”</span></div>
 
+          {data.guidedTonight && data.owned.length>0 && <>
+            <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.maybe, letterSpacing:'.13em', textTransform:'uppercase', marginBottom:9 }}>Tonight’s bottle</div>
+            <OwnedRow w={data.owned[0]} onOpen={onOpen}/>
+            <div style={{ fontSize:14, color:T.ink2, lineHeight:1.5, marginTop:5 }}>{data.tonightReason}</div>
+            {data.owned.length>1 && <div style={{ marginTop:20 }}>
+              <div style={{ fontSize:15.5, fontWeight:720, letterSpacing:-0.3, marginBottom:9 }}>Two other good choices</div>
+              {data.owned.slice(1,3).map(w=><div key={w.id} style={{ marginBottom:12 }}>
+                <div style={{ fontFamily:'var(--mono)', fontSize:9.5, color:T.maybe, letterSpacing:'.11em', textTransform:'uppercase', marginBottom:5 }}>{alternativeDirection(data.owned[0],w)}</div>
+                <OwnedRow w={w} onOpen={onOpen}/>
+              </div>)}
+            </div>}
+          </>}
+          {data.guidedTonight && !data.owned.length && <div style={{ marginBottom:16, padding:'13px 14px', border:`1px dashed ${T.line2}`, borderRadius:12, background:T.canvas, fontSize:13.5, color:T.ink2, lineHeight:1.5 }}>
+            Nothing you currently own fits closely enough. Here is the style to look for instead.
+          </div>}
+
           {/* ── The ten-second block ──────────────────────────────────
               Recommendation before explanation. Everything a hurried shopper
               needs to locate a bottle sits above this fold; depth is behind
               "Why this?". */}
+          {(!data.guidedTonight || !data.owned.length) && <>
           {pairingHeadline(data) && <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.maybe, letterSpacing:'.13em', textTransform:'uppercase', marginBottom:10 }}>{pairingHeadline(data)}</div>}
           <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.ink3, letterSpacing:'.14em', textTransform:'uppercase' }}>Look for</div>
           <div style={{ fontSize:30, fontWeight:790, letterSpacing:-0.9, color:T.ink, lineHeight:1.05, marginTop:4 }}>{data.primary.grape}</div>
@@ -411,6 +485,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
             <span style={{ fontFamily:'var(--mono)', fontSize:10, color:T.ink3, letterSpacing:'.12em', textTransform:'uppercase' }}>Also works</span>
             <span style={{ fontSize:14.5, color:T.ink, fontWeight:620 }}>{data.others.slice(0,2).map(o=>o.grape).join('  ·  ')}</span>
           </div>}
+          </>}
 
           <AvoidNote text={data.avoidNote}/>
 
@@ -423,7 +498,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
           </div>}
 
           {/* In your cellar — kept visually distinct from what to buy */}
-          <div style={{ marginTop:20, paddingTop:18, borderTop:`2px solid ${T.line2}` }}>
+          {!data.guidedTonight && <div style={{ marginTop:20, paddingTop:18, borderTop:`2px solid ${T.line2}` }}>
             <div style={{ display:'flex', alignItems:'baseline', gap:9, marginBottom:11 }}>
               <span style={{ fontSize:16.5, fontWeight:740, letterSpacing:-0.35 }}>In your cellar</span>
               <span style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3 }}>{data.owned.length ? `${data.owned.length} match${data.owned.length>1?'es':''}` : 'nothing matching'}</span>
@@ -431,10 +506,10 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
             {data.owned.length
               ? data.owned.map(w=> <OwnedRow key={w.id} w={w} onOpen={onOpen}/>)
               : <div style={{ padding:'14px', border:`1px dashed ${T.line2}`, borderRadius:12, background:T.canvas, fontSize:13.5, color:T.ink2, lineHeight:1.5 }}>Nothing here fits this one — the shelf guidance above is what to buy.</div>}
-          </div>
+          </div>}
 
           {/* Refine without starting over */}
-          <div style={{ marginTop:20 }}>
+          {!data.guidedTonight && <div style={{ marginTop:20 }}>
             <div style={{ fontFamily:'var(--mono)', fontSize:9.5, color:T.ink3, letterSpacing:'.13em', textTransform:'uppercase', marginBottom:8 }}>Change one thing</div>
             <div style={{ display:'flex', flexWrap:'wrap', gap:7 }}>
               {REFINEMENTS.map(([label, qualifier])=>(
@@ -443,15 +518,17 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
                     fontFamily:'var(--sans)', fontSize:12.5, fontWeight:560, cursor:'pointer' }}>{label}</button>
               ))}
             </div>
-          </div>
+          </div>}
+
+          {data.guidedTonight && <button onClick={()=>{ setGuideMeal(null); setPhase('guide-meal'); }} style={{ width:'100%', marginTop:18, padding:'12px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, cursor:'pointer' }}>Change the meal or mood</button>}
 
           {/* Depth, behind one control */}
-          <button onClick={()=>setShowWhy(v=>!v)} style={{ marginTop:20, background:'none', border:'none', padding:0, cursor:'pointer',
+          {!data.guidedTonight && <button onClick={()=>setShowWhy(v=>!v)} style={{ marginTop:20, background:'none', border:'none', padding:0, cursor:'pointer',
             display:'inline-flex', alignItems:'center', gap:6, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, color:T.ink2 }}>
             <Icon name={showWhy?'x':'sparkle'} size={14} color={T.ink2}/>{showWhy ? 'Hide the detail' : 'Why this?'}
-          </button>
+          </button>}
 
-          {showWhy && <div style={{ marginTop:12 }}>
+          {!data.guidedTonight && showWhy && <div style={{ marginTop:12 }}>
             {data.primary.deeper && <div style={{ padding:'14px 16px', background:`hsl(${typeHue(data.owned&&data.owned[0]?data.owned[0].type:'Red')} 30% 97%)`, border:`1px solid ${T.line}`, borderRadius:13 }}>
               <div style={{ fontSize:15.5, fontWeight:700, color:T.ink, letterSpacing:-0.25 }}>{data.primary.deeperTitle}</div>
               <div style={{ fontSize:14, color:T.ink2, lineHeight:1.55, marginTop:5 }}>{data.primary.deeper}</div>
@@ -464,7 +541,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
           </div>}
 
           {/* learning */}
-          {insightGrape && <div style={{ marginTop:22, display:'flex', gap:10, padding:'13px 14px', background:T.buyBg, borderRadius:12 }}>
+          {!data.guidedTonight && insightGrape && <div style={{ marginTop:22, display:'flex', gap:10, padding:'13px 14px', background:T.buyBg, borderRadius:12 }}>
             <Icon name="sparkle" size={16} color={T.buy}/>
             <span style={{ fontSize:13, color:T.buy, lineHeight:1.45, fontWeight:560 }}>We’re learning your taste: you mark <b>{insightGrape}</b> “Buy Again” most often.</span>
           </div>}
