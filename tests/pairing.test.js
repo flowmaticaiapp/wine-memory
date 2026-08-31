@@ -207,6 +207,23 @@ test('chicken with cream sauce goes to Chardonnay, not shellfish or plain poultr
   assert.match(r.primary.why, /cream/i);
 });
 
+test('pork tacos reach their own rule and never masquerade as roast chicken', () => {
+  for (const question of ['best wine type for pork tacos', 'tacos with pork', 'carnitas tacos', 'tacos al pastor']){
+    const r = heuristicPairing(question);
+    assert.equal(r.ruleId, 'pork-tacos', question);
+    assert.equal(r.dish, 'pork tacos');
+    assert.equal(r.primary.grape, 'Dry Rosé');
+    assert.match(r.primary.why, /pork/i);
+    assert.match(r.primary.why, /chile|lime|salsa|taco/i);
+  }
+});
+
+test('plain pork is distinct from poultry, while spice can still lead the pairing', () => {
+  assert.equal(heuristicPairing('wine with a pork chop').ruleId, 'pork');
+  assert.equal(heuristicPairing('spicy pork curry').ruleId, 'spicy-heat');
+  assert.equal(heuristicPairing('roast chicken').ruleId, 'poultry');
+});
+
 test('creamy shellfish still reaches its own rule', () => {
   const r = heuristicPairing('creamy shellfish pasta');
   assert.equal(r.ruleId, 'cream-shellfish');
