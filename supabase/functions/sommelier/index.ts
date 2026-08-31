@@ -42,7 +42,7 @@ const SCHEMA = {
         bottleProducer: { type: "string", description: "Optional exact bottle, STRUCTURED: the producer exactly as the evidence states it. Empty when no exact bottle is supported." },
         bottleCuvee: { type: "string", description: "The wine/cuvée name exactly as the evidence states it. Empty when bottleProducer is empty." },
         bottleVintage: { type: "string", description: "The exact vintage the evidence supports for this bottle, or 'NV'. Never guessed or transferred from another vintage. Empty when bottleProducer is empty." },
-        bottleWhy: { type: "string", description: "One short evidence-grounded reason for the exact bottle. Empty when bottleProducer is empty." },
+        bottleWhy: { type: "string", description: "One short evidence-grounded reason for the exact bottle. Empty when bottleProducer is empty. NOTE: the server verifies bottle identity only, so this field is currently DISCARDED and never displayed — no bottle-specific score, critic claim, award, tasting note, or drinking window reaches the user until each such claim has its own deterministic verification." },
       },
       required: ["grape", "why", "deeperTitle", "deeper", "lookFor", "matchGrapes", "bottleProducer", "bottleCuvee", "bottleVintage", "bottleWhy"],
     },
@@ -182,7 +182,7 @@ Deno.serve(async (req) => {
       `deeperTitle (the region or appellation level, e.g. "Northern Rhône Syrah — Crozes-Hermitage or Saint-Joseph"), deeper (2 sentences on that region), ` +
       `lookFor (2-3 practical shop clues: label terms, appellation names, body, sweetness, tannin, oak, alcohol level), ` +
       `matchGrapes (the primary grape plus closely related grapes) }; ` +
-      `bottleProducer, bottleCuvee and bottleVintage name one exact bottle in STRUCTURED fields only when the evidence threshold above is met, copied exactly as a cited source states them (with bottleWhy giving the evidence-grounded reason); otherwise all four are empty strings. The server independently verifies these fields against the cited evidence and discards any bottle the citations do not support. ` +
+      `bottleProducer, bottleCuvee and bottleVintage name one exact bottle in STRUCTURED fields only when the evidence threshold above is met, copied exactly as a cited source states them; otherwise all four bottle fields are empty strings. The server independently verifies these fields against the cited evidence, discards any bottle the citations do not support, and never displays bottleWhy — only the verified identity is shown. ` +
       `others (ONE or TWO alternatives, each with a direction saying how it CHANGES the experience, and a one-sentence why — two only when the second is genuinely a different direction); ` +
       `and avoidNote (one sentence, ONLY when a meaningful conflict exists — empty string otherwise, never manufactured).\n` +
       `Rank the strongest option first. Do not list every possible grape or region. Keep it concise.\n` +

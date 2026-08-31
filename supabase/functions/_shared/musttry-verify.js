@@ -91,17 +91,22 @@ export function sourceCarriesMerchant(entry, merchant){
 // another wine from the producer, or another vintage yields empty strings —
 // and the general pairing guidance stands on its own either way. The
 // sommelier never displays a price, so no price may pass through here.
+//
+// bottleWhy is ALWAYS empty: verifying an identity does not verify the
+// model's reason for it, and a supported bottle must never smuggle out an
+// unsupported score, critic claim, award, tasting note, or drinking window.
+// The ordinary pairing explanation already says why the style fits.
 export function verifiedSommelierBottle(fields, sourceIds, evidence){
   const none = { bottle: '', bottleWhy: '' };
   if (!fields || typeof fields !== 'object') return none;
   const ok = verifiedCandidates([{
     producer: fields.producer, cuvee: fields.cuvee, vintage: fields.vintage,
-    grape: '', region: '', why: typeof fields.why === 'string' ? fields.why : '',
+    grape: '', region: '', why: '',
     sourceIds,
   }], evidence);
   if (!ok.length) return none;
   const b = ok[0];
-  return { bottle: `${b.producer} ${b.name} ${b.vintage}`.replace(/\s+/g, ' ').trim(), bottleWhy: b.why };
+  return { bottle: `${b.producer} ${b.name} ${b.vintage}`.replace(/\s+/g, ' ').trim(), bottleWhy: '' };
 }
 
 export function verifiedCandidates(rawCandidates, evidence){
@@ -142,7 +147,12 @@ export function verifiedCandidates(rawCandidates, evidence){
       producer, name: cuvee, vintage,
       grape: typeof c.grape === 'string' ? c.grape.trim() : '',
       region: typeof c.region === 'string' ? c.region.trim() : '',
-      why: typeof c.why === 'string' ? c.why.trim() : '',
+      // A verified IDENTITY does not verify the model's REASON. The proposed
+      // `why` is free prose that can carry a fabricated score, critic claim,
+      // award, tasting note, or drinking window past an honestly-supported
+      // bottle. Until each such claim gets its own deterministic evidence
+      // verification, no bottle-specific reason leaves this boundary.
+      why: '',
       sources, price,
     });
     if (out.length >= 3) break;                      // a shortlist, not a catalogue

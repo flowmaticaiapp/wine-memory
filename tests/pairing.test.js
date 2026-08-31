@@ -77,6 +77,12 @@ test('isPairingQuery still routes food questions to the rule set', () => {
 
 test('evidence-first questions are NEVER classified as pairing questions', () => {
   assert.equal(isPairingQuery('Should I buy this bottle?'), false);
+  // Unqualified "what wine"/"which wine" is buying advice, self-reflection,
+  // or a comparison — never a dish. (v4 review blocker.)
+  assert.equal(isPairingQuery('What wine should I buy?'), false);
+  assert.equal(isPairingQuery('Which wine is better?'), false);
+  assert.equal(isPairingQuery('What wine do I like?'), false);
+  assert.equal(isPairingQuery('What wine is Barolo?'), false);
   assert.equal(isPairingQuery('Why do I like Nebbiolo?'), false);
   assert.equal(isPairingQuery('Is 2021 a good vintage?'), false);
   assert.equal(isPairingQuery('Barolo vs Barbaresco?'), false);
@@ -92,6 +98,7 @@ test('evidence-first questions are NEVER classified as pairing questions', () =>
 test('genuine food questions keep their instant answer, matched or not', () => {
   // Matched dish rules.
   assert.equal(isPairingQuery('steak with mushroom sauce'), true);
+  assert.equal(isPairingQuery('What wine pairs with steak?'), true);
   assert.equal(isPairingQuery('What should I drink with pesto pasta?'), true);
   // Unmatched but genuinely about food or a meal occasion.
   assert.equal(isPairingQuery('what goes with pierogi casserole?'), true);

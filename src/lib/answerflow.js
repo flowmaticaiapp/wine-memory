@@ -118,7 +118,11 @@ export function reconcileEnrichment(initial, researched){
   const sources = Array.isArray(r.sources) ? r.sources : [];
   const primary = { ...r.primary };
   // A bottle claim without cited sources does not render — ever.
-  if (!sources.length){ delete primary.bottle; delete primary.bottleWhy; }
+  if (!sources.length){ delete primary.bottle; }
+  // A bottle-specific REASON never renders at all: the server verifies the
+  // bottle's identity, not the prose about it, so a supported bottle must not
+  // carry an unsupported score, critic claim, or tasting note into the UI.
+  delete primary.bottleWhy;
   // Never trade concrete shelf guidance for nothing.
   if (!(primary.lookFor && primary.lookFor.length) && (initial.primary.lookFor||[]).length){
     primary.lookFor = initial.primary.lookFor;

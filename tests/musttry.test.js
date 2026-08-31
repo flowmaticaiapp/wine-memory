@@ -128,6 +128,15 @@ test('a candidate needs a source that actually supports producer, cuvée and vin
   assert.deepEqual(ok.sources, [{ title:'Jean Foillard — Morgon Côte du Py', url:'https://producer.example/cote-du-py' }]);
 });
 
+test('ADVERSARIAL: a verified Must Try identity cannot carry a fabricated critic claim', () => {
+  const [ok] = verifiedCandidates([{ ...FOILLARD, why:'James Suckling rated this 100 points.', sourceIds:[1] }], REGISTRY);
+  assert.ok(ok, 'the honestly-supported identity survives');
+  assert.equal(ok.why, '', 'the unverified reason does not');
+  // And the client belt holds independently, even against a rogue response.
+  const rogue = displayableCandidates({ candidates:[{ ...GOOD, why:'James Suckling rated this 100 points.' }] })[0];
+  assert.equal(rogue.why, '');
+});
+
 test('ADVERSARIAL: a valid but unrelated sourceId is not evidence — candidate rejected', () => {
   assert.equal(verifiedCandidates([{ ...FOILLARD, sourceIds:[3] }], REGISTRY).length, 0,
     'a real Beaujolais article that never mentions the bottle supports nothing');

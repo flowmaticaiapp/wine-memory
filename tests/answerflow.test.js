@@ -60,7 +60,12 @@ test('EVERY pairing question renders instantly — matched rule or versatile fal
   assert.ok(VERSATILE.primary.grape, 'still a useful recommendation');
   // Non-pairing questions keep research-first waiting — including the four
   // review-blocker questions that must NEVER flash the versatile card.
+  assert.equal(instantEligible('What wine pairs with steak?'), true);
   assert.equal(instantEligible('Should I buy this bottle?'), false);
+  assert.equal(instantEligible('What wine should I buy?'), false);
+  assert.equal(instantEligible('Which wine is better?'), false);
+  assert.equal(instantEligible('What wine do I like?'), false);
+  assert.equal(instantEligible('What wine is Barolo?'), false);
   assert.equal(instantEligible('Why do I like Nebbiolo?'), false);
   assert.equal(instantEligible('Is 2021 a good vintage?'), false);
   assert.equal(instantEligible('Barolo vs Barbaresco?'), false);
@@ -169,11 +174,13 @@ test('a bottle claim survives only alongside cited sources', () => {
   assert.equal(rec.data.primary.bottleWhy, undefined);
 
   const withBoth = researchedPairing({
-    primary:{ ...researchedPairing().primary, bottle:'Some Producer Crozes-Hermitage 2021', bottleWhy:'Cited.' },
+    primary:{ ...researchedPairing().primary, bottle:'Some Producer Crozes-Hermitage 2021', bottleWhy:'James Suckling rated this 100 points.' },
     sources: SOURCED,
   });
-  assert.equal(reconcileEnrichment(INSTANT, withBoth).data.primary.bottle,
-    'Some Producer Crozes-Hermitage 2021');
+  const kept = reconcileEnrichment(INSTANT, withBoth).data.primary;
+  assert.equal(kept.bottle, 'Some Producer Crozes-Hermitage 2021');
+  assert.equal(kept.bottleWhy, undefined,
+    'a bottle-specific reason is unverified prose and never renders — even beside a sourced bottle');
 });
 
 test('enrichment never removes safety information or the price limit', () => {

@@ -84,8 +84,10 @@ export function displayableCandidates(response){
         && p.source && typeof p.source.url === 'string'){
       price = { amount:p.amount, merchant:p.merchant, source:p.source };
     }
+    // Client belt matching the server boundary: a bottle-specific reason is
+    // unverified prose and never renders, even from a stale or rogue response.
     out.push({ producer:c.producer, name:c.name, vintage:String(c.vintage),
-      grape:c.grape||'', region:c.region||'', why:c.why||'', sources, price });
+      grape:c.grape||'', region:c.region||'', why:'', sources, price });
     if (out.length >= 3) break;
   }
   return out;

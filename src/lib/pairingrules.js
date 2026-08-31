@@ -92,7 +92,12 @@ function priceLimit(q){ const m=q.match(/under\s*\$?(\d+)|below\s*\$?(\d+)|\$(\d
 // evidence, not a Pinot Noir card. The classifier now requires an actual
 // pairing signal: pairing-specific language, a food term, a meal occasion, or
 // a matched dish rule. No punctuation shortcut.
-const PAIRING_LANGUAGE = /\bpair\w*\b|\bgo(?:es)?\s+with\b|\bserve\s+with\b|\bdrink\s+with\b|\bhave\s+with\b|\bmatch\w*\s+with\b|\bwine\s+(?:for|with)\b|\bwhat\s+(?:should\s+i|to)\s+(?:drink|open|pour|serve)\b|\bwhat\s+wine\b|\bwhich\s+wine\b/i;
+// No unqualified "what wine"/"which wine": those words alone cover buying
+// advice, self-reflection and comparisons ("What wine should I buy?", "Which
+// wine is better?", "What wine do I like?", "What wine is Barolo?") — all
+// research-first questions. A question is instant only when a genuine food,
+// meal, occasion, or pairing signal appears alongside it.
+const PAIRING_LANGUAGE = /\bpair\w*\b|\bgo(?:es)?\s+with\b|\bserve\s+with\b|\bdrink\s+with\b|\bhave\s+with\b|\bmatch\w*\s+with\b|\bwine\s+(?:for|with)\b|\bwhat\s+(?:should\s+i|to)\s+(?:drink|open|pour|serve)\b/i;
 const FOOD_WORDS = /\bpasta\b|\bpizza\b|\bsteak\b|\bbeef\b|\bribeye\b|\bchicken\b|\bpoultry\b|\bturkey\b|\bpork\b|\blamb\b|\bbrisket\b|\bfish\b|\bseafood\b|\bshellfish\b|\boysters?\b|\bsushi\b|\bshrimp\b|\bprawns?\b|\bcrab\b|\blobster\b|\bscallops?\b|\bcheese\b|\bcharcuterie\b|\bsalad\b|\bvegetables?\b|\bveggies?\b|\bmushrooms?\b|\brisotto\b|\bcurry\b|\btacos?\b|\bburgers?\b|\bbbq\b|\bbarbecue\b|\bcasserole\b|\bsoup\b|\bstew\b|\broast\b|\bgrill(?:ed|ing)?\b|\bdessert\b|\bchocolate\b|\bappetizers?\b|\bsnacks?\b|\bsauce\b|\beat(?:ing)?\b|\bmeals?\b|\bdish(?:es)?\b|\bfood\b|\bdinner\b|\blunch\b|\bbrunch\b|\bcooking\b|\brecipe\b/i;
 const OCCASIONS = /\btonight\b|\bdinner\s+party\b|\bpotluck\b|\bthanksgiving\b|\bbring\s+to\b|\bdate\s+night\b|\bweeknight\b|\bholiday\s+meal\b|\bcookout\b/i;
 const isPairingQuery = (q)=>{

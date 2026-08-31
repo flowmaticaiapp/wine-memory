@@ -68,7 +68,18 @@ const NORD = { producer:'Domaine Nord', cuvee:'Crozes-Hermitage', vintage:'2021'
 test('a sommelier bottle survives only when a citation supports its exact identity', () => {
   const ok = verifiedSommelierBottle(NORD, [1, 2], BOTTLE_EVIDENCE);
   assert.equal(ok.bottle, 'Domaine Nord Crozes-Hermitage 2021');
-  assert.equal(ok.bottleWhy, 'Cited.');
+  assert.equal(ok.bottleWhy, '', 'identity is verified; the model’s reason is not, and never passes through');
+});
+
+test('ADVERSARIAL: a verified identity cannot smuggle out a fabricated critic claim', () => {
+  // The citation GENUINELY supports producer + cuvée + vintage…
+  const proposal = { ...NORD, why:'James Suckling rated this 100 points.' };
+  const out = verifiedSommelierBottle(proposal, [1], BOTTLE_EVIDENCE);
+  // …so the bottle identity survives…
+  assert.equal(out.bottle, 'Domaine Nord Crozes-Hermitage 2021');
+  // …but the fabricated explanation never reaches the response.
+  assert.equal(out.bottleWhy, '');
+  assert.ok(!JSON.stringify(out).includes('Suckling'), 'no fragment of the unverified claim escapes');
 });
 
 test('ADVERSARIAL: a valid but unrelated citation does not justify the bottle', () => {
