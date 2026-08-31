@@ -11,7 +11,7 @@ import { BottlePhoto, typeHue } from './bottle.jsx';
 import { Spinner } from './add.jsx';
 import { V_STATUS } from '../lib/constants.js';
 import { personalWines } from '../lib/palate.js';
-import { DISH_RULES, DEFAULT_RULE, priceLimit, isPairingQuery, hasSpecificFoodContext, heuristicPairing, pairingHeadline } from '../lib/pairingrules.js';
+import { DISH_RULES, DEFAULT_RULE, priceLimit, isPairingQuery, hasSpecificFoodContext, needsTacoGuidance, heuristicPairing, pairingHeadline } from '../lib/pairingrules.js';
 import { textMatchesAnyGrape } from '../lib/grapes.js';
 import { needsTonightGuidance, rankTonightBottles, tonightReason, alternativeDirection } from '../lib/tonight.js';
 import { relevantBuyAgainGrape } from '../lib/pairing-insight.js';
@@ -64,6 +64,23 @@ const TONIGHT_MOODS = [
   ['Something different','different','something different'],
   ['Decide for me','decide','decide for me'],
 ].map(([label,id,query])=>({ label,id,query }));
+const TACO_FILLINGS = [
+  ['Pork / carnitas','pork'], ['Beef / carne asada','beef'], ['Chicken','chicken'],
+  ['Fish / shrimp','fish'], ['Vegetable / bean','vegetable'], ['Mixed / not sure','mixed'],
+].map(([label,query])=>({ label,query }));
+
+function TacoChoices({ onChoose }){
+  return <div style={{ paddingTop:12 }}>
+    <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.maybe, letterSpacing:'.13em', textTransform:'uppercase' }}>One quick question</div>
+    <div style={{ fontFamily:'var(--serif)', fontSize:27, color:T.ink, marginTop:7 }}>What kind of tacos?</div>
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:9, marginTop:17 }}>
+      {TACO_FILLINGS.map((choice)=><button key={choice.label} onClick={()=>onChoose(choice)}
+        style={{ minHeight:58, padding:'11px 10px', borderRadius:13, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink,
+          fontFamily:'var(--sans)', fontSize:13.5, fontWeight:630, cursor:'pointer' }}>{choice.label}</button>)}
+    </div>
+    <div style={{ marginTop:15, fontSize:12.5, color:T.ink4, lineHeight:1.45 }}>The filling, salsa and heat matter more than the word “tacos” alone.</div>
+  </div>;
+}
 
 function TonightChoices({ step, meal, onMeal, onMood }){
   const choices = step === 'meal' ? TONIGHT_MEALS : TONIGHT_MOODS;
@@ -207,7 +224,7 @@ function AnswerText({ text }){
 }
 function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePairing }){
   const [q, setQ] = pUS('');
-  const [phase, setPhase] = pUS('idle');   // idle | guide-meal | guide-mood | thinking | pairing | search
+  const [phase, setPhase] = pUS('idle');   // idle | guide-taco | guide-meal | guide-mood | thinking | pairing | search
   const [data, setData] = pUS(null);
   const [asked, setAsked] = pUS('');
   const [guideMeal, setGuideMeal] = pUS(null);
@@ -277,6 +294,11 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     const Q = (query!=null?query:q).trim(); if(!Q) return;
     const token = ++runCounter;
     setAsked(Q); setQ(Q); track('sommelier_question');
+
+    if (!options.guidedTaco && needsTacoGuidance(Q)){
+      setData(null); setPhase('guide-taco');
+      return;
+    }
 
     if (!options.guidedTonight && needsTonightGuidance(Q, hasSpecificFoodContext(Q))){
       setData(null); setGuideMeal(null); setPhase('guide-meal');
@@ -355,6 +377,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     }
     setGuideMeal(meal); setPhase('guide-mood');
   };
+  const chooseTaco = (filling)=> run(`Best wine for ${filling.query} tacos`, { guidedTaco:true });
   const chooseMood = (mood)=>{
     const withMeal = guideMeal?.query ? ` with ${guideMeal.query}` : '';
     run(`What should I open tonight${withMeal}? I want ${mood.query}.`, {
@@ -404,6 +427,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
           <div style={{ marginTop:18, fontSize:12.5, color:T.ink4, lineHeight:1.5, display:'flex', gap:8 }}><Icon name="sparkle" size={14} color={T.ink4}/> Each answer explains the style and region, then shows the bottles you already own that fit.</div>
         </>}
 
+        {phase==='guide-taco' && <TacoChoices onChoose={chooseTaco}/>}
         {phase==='guide-meal' && <TonightChoices step="meal" meal={guideMeal} onMeal={chooseMeal} onMood={chooseMood}/>}
         {phase==='guide-mood' && <TonightChoices step="mood" meal={guideMeal} onMeal={chooseMeal} onMood={chooseMood}/>}
 

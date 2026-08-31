@@ -7,8 +7,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
-import { DISH_RULES, DEFAULT_RULE, heuristicPairing, priceLimit, isPairingQuery, hasSpecificFoodContext, pairingHeadline } from '../src/lib/pairingrules.js';
+import { DISH_RULES, DEFAULT_RULE, heuristicPairing, priceLimit, isPairingQuery, hasSpecificFoodContext, needsTacoGuidance, pairingHeadline } from '../src/lib/pairingrules.js';
+
+const pairingScreenSource = readFileSync(new URL('../src/components/pairing.jsx', import.meta.url), 'utf8');
 
 // ── An unmatched dish must not pretend it was understood ────────────
 
@@ -218,6 +221,34 @@ test('pork tacos reach their own rule and never masquerade as roast chicken', ()
     assert.match(r.primary.why, /chile|lime|salsa/i);
     assert.match(r.primary.why, /tortilla/i);
   }
+});
+
+test('an unspecified taco question asks for the filling before recommending', () => {
+  assert.equal(needsTacoGuidance('best wine for tacos?'), true);
+  assert.equal(needsTacoGuidance('taco pairing'), true);
+  for (const q of ['pork tacos','beef tacos','chicken tacos','fish tacos','shrimp tacos','vegetable tacos','mixed tacos']){
+    assert.equal(needsTacoGuidance(q), false, q);
+  }
+  assert.match(pairingScreenSource, /needsTacoGuidance\(Q\)[\s\S]*?setPhase\('guide-taco'\)/);
+  assert.match(pairingScreenSource, /phase==='guide-taco'[\s\S]*?<TacoChoices/);
+});
+
+test('every taco filling uses Mexican dish context instead of a protein-only rule', () => {
+  const cases = [
+    ['beef tacos','beef-tacos','Tempranillo'],
+    ['chicken tacos','chicken-tacos','Verdejo'],
+    ['fish tacos','fish-tacos','Albariño'],
+    ['vegetable tacos','vegetable-tacos','Sauvignon Blanc'],
+    ['mixed tacos','mixed-tacos','Dry Rosé'],
+  ];
+  for (const [q,id,grape] of cases){
+    const r = heuristicPairing(q);
+    assert.equal(r.ruleId, id, q);
+    assert.equal(r.primary.grape, grape, q);
+    assert.match(r.dish, /Mexican|taco/i);
+    assert.match(r.primary.why, /salsa|lime|chile|topping/i);
+  }
+  assert.notEqual(heuristicPairing('best wine for tacos?').ruleId, 'general-versatile');
 });
 
 test('plain pork is distinct from poultry, while spice can still lead the pairing', () => {
