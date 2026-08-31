@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  mustTryGuidance, tasteSummary, displayableCandidates,
+  mustTryGuidance, mustTryExperiences, MUST_TRY_EXPERIENCES, tasteSummary, displayableCandidates,
   groupedCandidates,
   dismissKeyFor, candidateKey, readDismissed, addDismissed, withoutDismissed, PERSONAL_MIN,
   MUST_TRY_RESEARCH_TIMEOUT_MS,
@@ -32,6 +32,31 @@ const CELLAR = [0,1,2,3,4,5].map(i=>ratedWine(i));
 test('Must Try allows time for both web research and bottle verification', () => {
   assert.ok(MUST_TRY_RESEARCH_TIMEOUT_MS > RESEARCH_TIMEOUT_MS);
   assert.ok(MUST_TRY_RESEARCH_TIMEOUT_MS <= 60_000, 'the longer request remains bounded');
+});
+
+test('the durable roadmap contains source-backed experiences, not generic favorite grapes', () => {
+  assert.ok(MUST_TRY_EXPERIENCES.length >= 6);
+  assert.equal(new Set(MUST_TRY_EXPERIENCES.map(x=>x.id)).size, MUST_TRY_EXPERIENCES.length);
+  for (const experience of MUST_TRY_EXPERIENCES){
+    assert.ok(experience.title && experience.why && experience.lookFor && experience.query);
+    assert.ok(Array.isArray(experience.sources) && experience.sources.length);
+    assert.ok(experience.sources.every(s=>/^https:\/\//.test(s.url)));
+  }
+  assert.ok(MUST_TRY_EXPERIENCES.some(x=>x.title==='Cru Beaujolais'));
+  assert.ok(MUST_TRY_EXPERIENCES.some(x=>x.title==='Traditional Rioja'));
+  assert.ok(!MUST_TRY_EXPERIENCES.some(x=>/^Pinot Noir$/i.test(x.title)), 'a favorite grape alone is not a Must Try experience');
+});
+
+test('real palate data promotes relevant experiences; samples never do', () => {
+  const ranked = mustTryExperiences(CELLAR);
+  const beaujolais = ranked.find(x=>x.id==='cru-beaujolais');
+  assert.equal(beaujolais.category, 'palate');
+  assert.ok(beaujolais.fit > 0);
+
+  const sampleOnly = CELLAR.map(w=>({ ...w, sample:true }));
+  const general = mustTryExperiences(sampleOnly);
+  assert.equal(general.find(x=>x.id==='cru-beaujolais').category, 'essential');
+  assert.ok(general.every(x=>x.fit===0));
 });
 
 // ── Instant guidance ────────────────────────────────────────────────

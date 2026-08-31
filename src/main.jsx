@@ -239,7 +239,7 @@ function VApp({ session }){
       {overlay==='search' && <PairingSearch wines={wines} userId={userId} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
       {overlay==='pairinghome' && <PairingHome onBack={()=>setOverlay(null)} onMenu={()=>setOverlay('menu')} onAsk={ask}/>}
       {overlay==='wishlist' && <WishlistScreen onClose={()=>setOverlay(null)} onPurchased={wishlistPurchased} onToast={flash}/>}
-      {overlay==='musttry' && <MustTryScreen wines={wines} userId={userId} onClose={()=>setOverlay(null)} onToast={flash} onPurchased={wishlistPurchased}/>}
+      {overlay==='musttry' && <MustTryScreen wines={wines} userId={userId} onClose={()=>setOverlay(null)} onToast={flash} onPurchased={wishlistPurchased} onFindBottle={ask}/>}
       {overlay==='favorites' && <FavoritesScreen wines={wines} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onToggle={toggleFavorite}/>}
       {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining} recent={dining}/>}
       {overlay==='pour' && <LearnReader onClose={()=>setOverlay(null)} onExplore={()=>{ setOverlay(null); setTab('learn'); }}/>}

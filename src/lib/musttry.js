@@ -17,6 +17,82 @@ import { RESEARCH_FIRST_TIMEOUT_MS } from './answerflow.js';
 export const PERSONAL_MIN = 5;
 export const MUST_TRY_RESEARCH_TIMEOUT_MS = RESEARCH_FIRST_TIMEOUT_MS;
 
+// A durable editorial roadmap. These are wine EXPERIENCES, not claims that one
+// exact vintage is universally best. Each entry is backed by a public educator
+// or publication page and remains useful even when live bottle research is
+// slow. Exact bottles still pass through the stricter evidence boundary below.
+export const MUST_TRY_EXPERIENCES = [
+  {
+    id:'cru-beaujolais', title:'Cru Beaujolais', subtitle:'Start with Morgon or Moulin-à-Vent',
+    why:'Experience the serious side of Gamay: freshness and red fruit, with enough earth and structure to evolve beyond a simple young Beaujolais.',
+    lookFor:'Morgon, Côte du Py or Moulin-à-Vent on the label.',
+    matches:['gamay','pinot noir','beaujolais','morgon'], defaultCategory:'essential',
+    query:'Find me a credible, currently available Cru Beaujolais—preferably Morgon or Moulin-à-Vent—that shows why wine lovers should try the style. Verify the exact producer and vintage before naming a bottle.',
+    sources:[
+      { title:'Wine for Normal People · Interesting Reds', url:'https://www.winefornormalpeople.com/classes/interesting-reds-wines-7-19-25/' },
+      { title:'James Suckling · Top 100 World Wines 2025', url:'https://www.jamessuckling.com/wine-tasting-reports/top-100-world-wines-2025-a-bow-tie-on-bordeaux' },
+    ],
+  },
+  {
+    id:'northern-rhone-syrah', title:'Northern Rhône Syrah', subtitle:'Saint-Joseph, Crozes-Hermitage or Cornas',
+    why:'A reference point for savory Syrah—peppery, smoky and structured rather than simply ripe and powerful.',
+    lookFor:'Saint-Joseph or Crozes-Hermitage for an approachable start; Cornas or Hermitage for more structure.',
+    matches:['syrah','shiraz','rhône','rhone'], defaultCategory:'essential',
+    query:'Find me a credible, currently available Northern Rhône Syrah that is a strong introduction to the style. Verify the exact producer and vintage before naming a bottle.',
+    sources:[{ title:'Decanter · Syrah and Shiraz guide', url:'https://www.decanter.com/learn/syrah-shiraz-difference-51740/' }],
+  },
+  {
+    id:'traditional-rioja', title:'Traditional Rioja', subtitle:'Reserva or Gran Reserva',
+    why:'Discover how Tempranillo changes with patient barrel and bottle aging, developing a savory character while retaining freshness.',
+    lookFor:'Rioja Reserva or Gran Reserva; compare a traditional house with a younger, fruit-led Rioja.',
+    matches:['tempranillo','rioja','spain'], defaultCategory:'essential',
+    query:'Find me a credible, currently available traditional Rioja Reserva or Gran Reserva that represents the style well. Verify the exact producer and vintage before naming a bottle.',
+    sources:[{ title:'Wine for Normal People · Tempranillo', url:'https://www.winefornormalpeople.com/podcast/ep-580-the-grape-miniseries-refresh-tempranillo/' }],
+  },
+  {
+    id:'dry-riesling', title:'Dry Riesling', subtitle:'Germany or Alsace',
+    why:'A lesson in intensity without heaviness: high acidity, clear fruit and strong expression of place without relying on oak.',
+    lookFor:'Trocken for dry German Riesling; VDP.GG marks a dry wine from a top classified German site.',
+    matches:['riesling','germany','alsace'], defaultCategory:'branch',
+    query:'Find me a credible, currently available dry Riesling from Germany or Alsace that is a strong introduction to the style. Verify the exact producer and vintage before naming a bottle.',
+    sources:[
+      { title:'Wine for Normal People · Riesling', url:'https://www.winefornormalpeople.com/podcast/ep-584-the-grape-miniseries-refresh-riesling/' },
+      { title:'Wine for Normal People · European classifications', url:'https://www.winefornormalpeople.com/podcast/ep-556-back-to-basics-european-classification-systems/' },
+    ],
+  },
+  {
+    id:'soave-classico', title:'Soave Classico', subtitle:'A serious Italian white',
+    why:'Move beyond familiar Chardonnay and Sauvignon Blanc with a textured, fresh white built around Garganega and a strong sense of place.',
+    lookFor:'Soave Classico and Garganega; single-site names such as La Rocca signal a more specific expression.',
+    matches:['garganega','soave','italy','white'], defaultCategory:'branch',
+    query:'Find me a credible, currently available Soave Classico that demonstrates why the region belongs on a wine-lover roadmap. Verify the exact producer and vintage before naming a bottle.',
+    sources:[{ title:'James Suckling · Top 100 World Wines 2025', url:'https://www.jamessuckling.com/wine-tasting-reports/top-100-world-wines-2025-a-bow-tie-on-bordeaux' }],
+  },
+  {
+    id:'bordeaux-2022', title:'2022 Bordeaux', subtitle:'A modern benchmark vintage',
+    why:'Explore the structure, blend and regional identity that make Bordeaux foundational—with a vintage widely highlighted for both concentration and approachability.',
+    lookFor:'Start with a named Left Bank or Right Bank appellation; the label may not list Cabernet or Merlot even though they lead the blend.',
+    matches:['cabernet sauvignon','merlot','cabernet franc','bordeaux','margaux'], defaultCategory:'essential',
+    query:'Find me a credible, currently available 2022 Bordeaux that is a sensible introduction to the vintage, with evidence from a respected wine source. Verify the exact château and vintage before naming it.',
+    sources:[{ title:'James Suckling · Top 100 World Wines 2025', url:'https://www.jamessuckling.com/wine-tasting-reports/top-100-world-wines-2025-a-bow-tie-on-bordeaux' }],
+  },
+];
+
+export function mustTryExperiences(wines){
+  const guidance = mustTryGuidance(wines);
+  const concepts = new Set();
+  if (guidance.signature?.grapes) guidance.signature.grapes.forEach(x=>concepts.add(String(x).toLowerCase()));
+  for (const r of regionsYouLove(wines, 4)) concepts.add(String(r.label).toLowerCase());
+  const score = (experience)=> experience.matches.reduce((n, term)=>{
+    const t = term.toLowerCase();
+    return n + ([...concepts].some(c=>c.includes(t) || t.includes(c)) ? 1 : 0);
+  }, 0);
+  return MUST_TRY_EXPERIENCES.map((experience)=>{
+    const fit = guidance.personalized ? score(experience) : 0;
+    return { ...experience, category:fit ? 'palate' : experience.defaultCategory, fit };
+  }).sort((a,b)=> b.fit-a.fit);
+}
+
 // ── Instant guidance ────────────────────────────────────────────────
 // Returns { personalized, count, signature, cards } — cards are
 // { kind:'grape'|'region'|'explore', title, why }.

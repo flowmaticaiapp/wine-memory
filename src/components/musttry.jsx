@@ -10,7 +10,7 @@ import { T } from '../lib/data.js';
 import { Icon } from './ui.jsx';
 import { Spinner } from './add.jsx';
 import { V_STATUS } from '../lib/constants.js';
-import { mustTryGuidance, tasteSummary, displayableCandidates, groupedCandidates, readDismissed, addDismissed, withoutDismissed, PERSONAL_MIN, MUST_TRY_RESEARCH_TIMEOUT_MS } from '../lib/musttry.js';
+import { mustTryGuidance, mustTryExperiences, tasteSummary, displayableCandidates, groupedCandidates, readDismissed, addDismissed, withoutDismissed, PERSONAL_MIN, MUST_TRY_RESEARCH_TIMEOUT_MS } from '../lib/musttry.js';
 import { withTimeout } from '../lib/answerflow.js';
 import * as wl from '../lib/wishlist.js';
 import * as db from '../lib/db.js';
@@ -21,16 +21,38 @@ import { PurchaseTypeSheet } from './wishlist.jsx';
 
 const { useState: mUS, useEffect: mUE, useRef: mUR, useMemo: mUM } = React;
 
-const KIND_LABEL = { grape:'A grape you love', region:'A region you love', explore:'Expand your range' };
-
-function GuidanceCard({ card }){
+function ExperienceCard({ experience, onFind }){
   return (
-    <div style={{ border:`1px solid ${T.line}`, borderRadius:14, background:'#fff', padding:'13px 15px', marginBottom:9 }}>
-      <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.13em', textTransform:'uppercase', color:T.maybe }}>{KIND_LABEL[card.kind] || 'Worth trying'}</div>
-      <div style={{ fontSize:16.5, fontWeight:720, color:T.ink, letterSpacing:-0.3, marginTop:4 }}>{card.title}</div>
-      <div style={{ fontSize:13.5, color:T.ink2, lineHeight:1.5, marginTop:4 }}>{card.why}</div>
+    <div style={{ border:`1px solid ${T.line}`, borderRadius:14, background:'#fff', padding:'14px 15px', marginBottom:10 }}>
+      <div style={{ fontSize:17, fontWeight:740, color:T.ink, letterSpacing:-0.35, lineHeight:1.2 }}>{experience.title}</div>
+      <div style={{ fontSize:12.5, color:T.ink3, marginTop:3 }}>{experience.subtitle}</div>
+      <div style={{ fontSize:13.5, color:T.ink2, lineHeight:1.5, marginTop:9 }}>{experience.why}</div>
+      <div style={{ marginTop:10, padding:'9px 10px', borderRadius:10, background:T.canvas }}>
+        <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.11em', textTransform:'uppercase', color:T.maybe }}>On the label</div>
+        <div style={{ fontSize:12.5, color:T.ink2, lineHeight:1.45, marginTop:3 }}>{experience.lookFor}</div>
+      </div>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px 10px', marginTop:9 }}>
+        {experience.sources.map((source)=><a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer" style={{ fontSize:11.5, color:T.ink3 }}>{source.title}</a>)}
+      </div>
+      <button onClick={()=>onFind(experience)} style={{ marginTop:11, width:'100%', padding:'11px 12px', borderRadius:11, border:`1px solid ${T.ink}`, background:T.ink, color:'#fff', fontFamily:'var(--sans)', fontSize:13.5, fontWeight:690, cursor:'pointer' }}>Find a bottle</button>
     </div>
   );
+}
+
+const EXPERIENCE_SECTION_COPY = {
+  palate:{ title:'For your palate', subtitle:'Wine experiences connected to styles and regions you already enjoy.' },
+  essential:{ title:'Wine-lover essentials', subtitle:'Reference points that make the wider world of wine easier to understand.' },
+  branch:{ title:'Worth branching out for', subtitle:'Distinctive styles that expand your range without being random.' },
+};
+
+function ExperienceSection({ kind, experiences, onFind }){
+  if (!experiences.length) return null;
+  const copy = EXPERIENCE_SECTION_COPY[kind];
+  return <section style={{ marginTop:kind==='palate'?8:24 }}>
+    <div style={{ fontFamily:'var(--serif)', fontSize:22, color:T.ink }}>{copy.title}</div>
+    <div style={{ fontSize:12.5, color:T.ink3, lineHeight:1.45, margin:'3px 0 11px' }}>{copy.subtitle}</div>
+    {experiences.map((experience)=><ExperienceCard key={experience.id} experience={experience} onFind={onFind}/>)}
+  </section>;
 }
 
 function CandidateCard({ c, onSave, onBuy, onDismiss, savedState }){
@@ -78,8 +100,9 @@ function BottleSection({ kind, candidates, onSave, onBuy, onDismiss, saved }){
 }
 
 // research: idle | searching | done | none  (none/failed render the same quiet line)
-function MustTryScreen({ wines, userId, onClose, onToast, onPurchased }){
+function MustTryScreen({ wines, userId, onClose, onToast, onPurchased, onFindBottle }){
   const guidance = mUM(()=> mustTryGuidance(wines), [wines]);
+  const experiences = mUM(()=> mustTryExperiences(wines), [wines]);
   const [candidates, setCandidates] = mUS([]);
   const [research, setResearch] = mUS('idle');
   const [researchMessage, setResearchMessage] = mUS('');
@@ -118,6 +141,16 @@ function MustTryScreen({ wines, userId, onClose, onToast, onPurchased }){
 
   const visible = withoutDismissed(candidates, dismissed);
   const grouped = groupedCandidates(visible, guidance.personalized);
+  const experienceGroups = {
+    palate:guidance.personalized ? experiences.filter(e=>e.category==='palate') : [],
+    essential:experiences.filter(e=>e.category==='essential'),
+    branch:experiences.filter(e=>e.category==='branch'),
+  };
+
+  const findBottle = (experience)=>{
+    track('musttry_find_bottle', { experience:experience.id });
+    if (onFindBottle) onFindBottle(experience.query);
+  };
 
   const dismiss = (c)=>{
     // An explicit user reaction — permanent per bottle+vintage (on this
@@ -186,12 +219,21 @@ function MustTryScreen({ wines, userId, onClose, onToast, onPurchased }){
       </div>
 
       <div style={{ flex:1, overflowX:'hidden', overflowY:'auto', padding:'16px 16px 40px' }}>
-        {/* Bottle recommendations lead; guidance remains available below. */}
+        {/* Durable, source-backed wine experiences lead. Exact bottles are optional enrichment. */}
         <div style={{ fontSize:12.5, color:T.ink3, lineHeight:1.5, marginBottom:14 }}>
           {guidance.personalized
-            ? <>Actual bottles from credible wine sources, shaped by the {guidance.count} wines you’ve genuinely rated.</>
-            : <>Actual bottles from credible sommelier, educator and wine-lover lists. Rate {PERSONAL_MIN} wines to add recommendations for your palate.</>}
+            ? <>A source-backed roadmap shaped by the {guidance.count} wines you’ve genuinely rated. Choose an experience, then let your sommelier find a bottle.</>
+            : <>A source-backed roadmap of regions and styles worth experiencing. Rate {PERSONAL_MIN} wines to add recommendations for your palate.</>}
         </div>
+
+        <ExperienceSection kind="palate" experiences={experienceGroups.palate} onFind={findBottle}/>
+        <ExperienceSection kind="essential" experiences={experienceGroups.essential} onFind={findBottle}/>
+        <ExperienceSection kind="branch" experiences={experienceGroups.branch} onFind={findBottle}/>
+
+        <section style={{ marginTop:28, paddingTop:20, borderTop:`1px solid ${T.line}` }}>
+          <div style={{ fontFamily:'var(--serif)', fontSize:21, color:T.ink }}>Verified bottle examples</div>
+          <div style={{ fontSize:12.5, color:T.ink3, lineHeight:1.45, marginTop:3 }}>Shown only when public evidence verifies the exact bottle. Choose Find a bottle above whenever you want a fresh search.</div>
+        </section>
 
         {/* The verified, actually-recommended bottle layer. */}
         {(research==='searching' || research==='searching-slow') && <div style={{ marginTop:16, display:'flex', alignItems:'center', gap:8 }}>
@@ -213,19 +255,12 @@ function MustTryScreen({ wines, userId, onClose, onToast, onPurchased }){
           Bottle research took too long to finish. Close Must Try and open it again to retry.
         </div>}
         {research==='unavailable' && <div style={{ marginTop:16, fontSize:12.5, color:T.ink4, lineHeight:1.5 }}>
-          The public wine-research service is temporarily unavailable. Your Explore Next guidance is still available below.
+          The public bottle-research service is temporarily unavailable. The source-backed roadmap above remains available.
         </div>}
         {research==='done' && visible.length===0 && <div style={{ marginTop:16, fontSize:12.5, color:T.ink4, lineHeight:1.5 }}>
-          You’ve passed on today’s verified bottles. Explore next remains below.
+          You’ve passed on today’s verified bottle examples.
         </div>}
 
-        <section style={{ marginTop:28, paddingTop:20, borderTop:`1px solid ${T.line}` }}>
-          <div style={{ fontFamily:'var(--serif)', fontSize:22, color:T.ink }}>Explore next</div>
-          <div style={{ fontSize:12.5, color:T.ink3, lineHeight:1.45, margin:'3px 0 12px' }}>
-            Grapes and regions worth knowing when you want guidance beyond a specific bottle.
-          </div>
-          {guidance.cards.map((card,i)=> <GuidanceCard key={i} card={card}/>)}
-        </section>
       </div>
       <PurchaseTypeSheet item={pendingBuy ? wl.mustTryCandidateToWishlistItem(pendingBuy) : null} onChoose={(type)=>doBuy(pendingBuy, type)} onCancel={()=>setPendingBuy(null)}/>
     </div>
