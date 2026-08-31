@@ -81,8 +81,10 @@ const fold = (s)=> String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLo
 export function inferWineType({ grape, name, region } = {}){
   const hay = fold([grape, name, region].filter(Boolean).join(' '));
   if (!hay) return '';
-  if (/\bros[e]\b|rosato|rosado|\brose\s+wine\b/.test(hay)) return 'Rosé';
+  // Sparkling is checked BEFORE rosé so a sparkling rosé files as Sparkling.
   if (/champagne|sparkling|\bbrut\b|\bcava\b|prosecco|cremant|spumante|franciacorta|pet[- ]?nat|lambrusco|sekt/.test(hay)) return 'Sparkling';
+  if (/\bport\b|\bporto\b|\bsherry\b|\bmadeira\b|\bmarsala\b|\bvermouth\b|\boloroso\b|\bamontillado\b|\bpedro ximenez\b|\btawny\b/.test(hay)) return 'Fortified';
+  if (/\bros[e]\b|rosato|rosado|\brose\s+wine\b/.test(hay)) return 'Rosé';
   const g = fold(grape);
   if (g){
     if (WHITE_GRAPES.some(w => g.includes(w))) return 'White';
@@ -171,4 +173,3 @@ export function isMissingTable(error){
   const msg = String(error.message || '');
   return code === '42P01' || code === 'PGRST205' || /relation .* does not exist|could not find the table/i.test(msg);
 }
-

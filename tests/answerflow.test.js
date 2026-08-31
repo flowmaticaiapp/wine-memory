@@ -58,7 +58,12 @@ test('EVERY pairing question renders instantly — matched rule or versatile fal
   assert.equal(VERSATILE.matched, false);
   assert.equal(VERSATILE.basis, 'rule');
   assert.ok(VERSATILE.primary.grape, 'still a useful recommendation');
-  // Non-pairing questions keep research-first waiting.
+  // Non-pairing questions keep research-first waiting — including the four
+  // review-blocker questions that must NEVER flash the versatile card.
+  assert.equal(instantEligible('Should I buy this bottle?'), false);
+  assert.equal(instantEligible('Why do I like Nebbiolo?'), false);
+  assert.equal(instantEligible('Is 2021 a good vintage?'), false);
+  assert.equal(instantEligible('Barolo vs Barbaresco?'), false);
   assert.equal(instantEligible('Explain Beaujolais'), false);
   assert.equal(instantEligible('Best Pinot Noir under $25'), false);
   assert.equal(instantEligible(''), false);
@@ -131,7 +136,7 @@ test('a matched rule answer is never replaced by prose or malformed results', ()
 });
 
 test('the versatile fallback for a non-dish question is corrected by a written answer', () => {
-  // "Barolo vs Barbaresco?" trips isPairingQuery ("?"), gets the honest
+  // A pairing-shaped question no rule understands gets the honest
   // versatile card instantly, and the model's real answer then corrects the
   // MODE — the card said only "a versatile starting point", so this is a
   // correction, never a flip of dish-specific advice.

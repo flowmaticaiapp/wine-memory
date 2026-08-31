@@ -78,7 +78,7 @@ function WineToTryForm({ onSave, onCancel, duplicateOf, onSaveAnyway }){
           <div><div style={label}>Type</div>
             <select value={f.type} onChange={set('type')} style={{ ...inputStyle, appearance:'auto' }}>
               <option value="">Not sure yet</option>
-              {['Red','White','Rosé','Sparkling','Dessert'].map(t=><option key={t} value={t}>{t}</option>)}
+              {['Red','White','Rosé','Sparkling','Dessert','Fortified'].map(t=><option key={t} value={t}>{t}</option>)}
             </select></div>
         </div>
         <div><div style={label}>Region</div><input value={f.region} onChange={set('region')} placeholder="e.g. Beaujolais, France" style={inputStyle}/></div>
@@ -204,7 +204,7 @@ function WishlistScreen({ onClose, onPurchased, onToast }){
           <div style={{ fontFamily:'var(--serif)', fontSize:20, color:T.ink }}>What kind of wine is it?</div>
           <div style={{ fontSize:13, color:T.ink2, lineHeight:1.5, marginTop:6 }}>{pendingBuy.producer ? pendingBuy.producer+' ' : ''}{pendingBuy.name} doesn’t have a type yet — pick one so it’s filed correctly.</div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:15 }}>
-            {['Red','White','Rosé','Sparkling','Dessert'].map(t=>(
+            {['Red','White','Rosé','Sparkling','Dessert','Fortified'].map(t=>(
               <button key={t} onClick={()=>doBuy(pendingBuy, t)} style={{ padding:'13px', borderRadius:12, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:14.5, fontWeight:650, cursor:'pointer' }}>{t}</button>
             ))}
             <button onClick={()=>setPendingBuy(null)} style={{ padding:'13px', borderRadius:12, border:'none', background:T.raised, color:T.ink2, fontFamily:'var(--sans)', fontSize:14, fontWeight:600, cursor:'pointer' }}>Cancel</button>

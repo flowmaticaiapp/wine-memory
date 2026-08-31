@@ -8,6 +8,7 @@
 
 import { gate } from "../_shared/auth.ts";
 import { citedEvidence, selectEvidenceSources } from "../_shared/research-evidence.js";
+import { verifiedSommelierBottle } from "../_shared/musttry-verify.js";
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const MODEL = Deno.env.get("SOMMELIER_MODEL") ?? "claude-sonnet-4-6";
@@ -38,10 +39,12 @@ const SCHEMA = {
         deeper: { type: "string", description: "2 sentences on that region and what to expect from it" },
         lookFor: { type: "array", items: { type: "string" }, description: "2-3 PRACTICAL clues for finding this in a shop or on a list: label terms, appellation names, body, sweetness, tannin, oak or alcohol level. Concrete and findable, e.g. 'German Riesling marked Kabinett — gently off-dry' or 'Alcohol at or below 11%'. Never a producer or a specific bottle." },
         matchGrapes: { type: "array", items: { type: "string" }, description: "Primary grape plus closely related grapes" },
-        bottle: { type: "string", description: "Optional exact producer, cuvee and vintage supported by the research evidence. Empty when exact identity is not verified." },
-        bottleWhy: { type: "string", description: "One short evidence-grounded reason for the exact bottle. Empty when bottle is empty." },
+        bottleProducer: { type: "string", description: "Optional exact bottle, STRUCTURED: the producer exactly as the evidence states it. Empty when no exact bottle is supported." },
+        bottleCuvee: { type: "string", description: "The wine/cuvée name exactly as the evidence states it. Empty when bottleProducer is empty." },
+        bottleVintage: { type: "string", description: "The exact vintage the evidence supports for this bottle, or 'NV'. Never guessed or transferred from another vintage. Empty when bottleProducer is empty." },
+        bottleWhy: { type: "string", description: "One short evidence-grounded reason for the exact bottle. Empty when bottleProducer is empty." },
       },
-      required: ["grape", "why", "deeperTitle", "deeper", "lookFor", "matchGrapes", "bottle", "bottleWhy"],
+      required: ["grape", "why", "deeperTitle", "deeper", "lookFor", "matchGrapes", "bottleProducer", "bottleCuvee", "bottleVintage", "bottleWhy"],
     },
     avoidNote: {
       type: "string",
@@ -179,7 +182,7 @@ Deno.serve(async (req) => {
       `deeperTitle (the region or appellation level, e.g. "Northern Rhône Syrah — Crozes-Hermitage or Saint-Joseph"), deeper (2 sentences on that region), ` +
       `lookFor (2-3 practical shop clues: label terms, appellation names, body, sweetness, tannin, oak, alcohol level), ` +
       `matchGrapes (the primary grape plus closely related grapes) }; ` +
-      `primary.bottle and primary.bottleWhy name one verified exact bottle only when the evidence threshold above is met; otherwise both are empty strings. ` +
+      `bottleProducer, bottleCuvee and bottleVintage name one exact bottle in STRUCTURED fields only when the evidence threshold above is met, copied exactly as a cited source states them (with bottleWhy giving the evidence-grounded reason); otherwise all four are empty strings. The server independently verifies these fields against the cited evidence and discards any bottle the citations do not support. ` +
       `others (ONE or TWO alternatives, each with a direction saying how it CHANGES the experience, and a one-sentence why — two only when the second is genuinely a different direction); ` +
       `and avoidNote (one sentence, ONLY when a meaningful conflict exists — empty string otherwise, never manufactured).\n` +
       `Rank the strongest option first. Do not list every possible grape or region. Keep it concise.\n` +
@@ -223,6 +226,22 @@ Deno.serve(async (req) => {
     const data = await res.json();
     const text = [...(data.content ?? [])].reverse().find((b: { type: string }) => b.type === "text")?.text ?? "{}";
     const parsed = JSON.parse(text);
+    // Deterministic bottle verification: the structured identity the model
+    // proposed must be supported — producer, cuvée AND vintage together — by
+    // a cited registry entry among its selected sources. A valid but
+    // unrelated source, another wine from the producer, or another vintage
+    // strips the bottle; the pairing guidance stands either way.
+    if (parsed?.primary && typeof parsed.primary === "object") {
+      const { bottle, bottleWhy } = verifiedSommelierBottle(
+        { producer: parsed.primary.bottleProducer, cuvee: parsed.primary.bottleCuvee, vintage: parsed.primary.bottleVintage, why: parsed.primary.bottleWhy },
+        parsed.sourceIds, research.evidence,
+      );
+      delete parsed.primary.bottleProducer;
+      delete parsed.primary.bottleCuvee;
+      delete parsed.primary.bottleVintage;
+      parsed.primary.bottle = bottle;
+      parsed.primary.bottleWhy = bottleWhy;
+    }
     const sources = selectEvidenceSources(research.evidence, parsed.sourceIds);
     delete parsed.sourceIds;
     return json({ ...parsed, sources, researchStatus: sources.length ? "researched" : research.status });

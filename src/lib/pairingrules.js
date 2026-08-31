@@ -82,7 +82,28 @@ const DEFAULT_RULE = { id:'general-versatile', dish:'this meal',
   others:[ {direction:'Pink and flexible', grape:'Dry Rosé', why:'Crowd-pleasing and flexible across many foods.'}, {direction:'Crisp and white', grape:'Sauvignon Blanc', why:'Crisp and bright for lighter plates.'} ], avoid:[] };
 
 function priceLimit(q){ const m=q.match(/under\s*\$?(\d+)|below\s*\$?(\d+)|\$(\d+)\s*or less/i); if(!m) return null; return parseInt(m[1]||m[2]||m[3]); }
-const isPairingQuery = (q)=> /\bpair|with|eat|dinner|drink|food|night|meal|\?|\bfor\b/i.test(q) || DISH_RULES.some(r=>r.re.test(q));
+
+// ── What counts as a food-pairing question ──────────────────────────
+// A pairing question earns the INSTANT rule answer; everything else waits for
+// research. An earlier version treated any question containing "?" as a
+// pairing question, which briefly showed the versatile pairing card for
+// "Should I buy this bottle?", "Why do I like Nebbiolo?", "Is 2021 a good
+// vintage?" and "Barolo vs Barbaresco?" — questions whose honest answers need
+// evidence, not a Pinot Noir card. The classifier now requires an actual
+// pairing signal: pairing-specific language, a food term, a meal occasion, or
+// a matched dish rule. No punctuation shortcut.
+const PAIRING_LANGUAGE = /\bpair\w*\b|\bgo(?:es)?\s+with\b|\bserve\s+with\b|\bdrink\s+with\b|\bhave\s+with\b|\bmatch\w*\s+with\b|\bwine\s+(?:for|with)\b|\bwhat\s+(?:should\s+i|to)\s+(?:drink|open|pour|serve)\b|\bwhat\s+wine\b|\bwhich\s+wine\b/i;
+const FOOD_WORDS = /\bpasta\b|\bpizza\b|\bsteak\b|\bbeef\b|\bribeye\b|\bchicken\b|\bpoultry\b|\bturkey\b|\bpork\b|\blamb\b|\bbrisket\b|\bfish\b|\bseafood\b|\bshellfish\b|\boysters?\b|\bsushi\b|\bshrimp\b|\bprawns?\b|\bcrab\b|\blobster\b|\bscallops?\b|\bcheese\b|\bcharcuterie\b|\bsalad\b|\bvegetables?\b|\bveggies?\b|\bmushrooms?\b|\brisotto\b|\bcurry\b|\btacos?\b|\bburgers?\b|\bbbq\b|\bbarbecue\b|\bcasserole\b|\bsoup\b|\bstew\b|\broast\b|\bgrill(?:ed|ing)?\b|\bdessert\b|\bchocolate\b|\bappetizers?\b|\bsnacks?\b|\bsauce\b|\beat(?:ing)?\b|\bmeals?\b|\bdish(?:es)?\b|\bfood\b|\bdinner\b|\blunch\b|\bbrunch\b|\bcooking\b|\brecipe\b/i;
+const OCCASIONS = /\btonight\b|\bdinner\s+party\b|\bpotluck\b|\bthanksgiving\b|\bbring\s+to\b|\bdate\s+night\b|\bweeknight\b|\bholiday\s+meal\b|\bcookout\b/i;
+const isPairingQuery = (q)=>{
+  const s = String(q ?? '');
+  if (!s.trim()) return false;
+  if (DISH_RULES.some(r=>r.re.test(s))) return true;
+  if (PAIRING_LANGUAGE.test(s)) return true;
+  if (FOOD_WORDS.test(s)) return true;
+  if (OCCASIONS.test(s)) return true;
+  return false;
+};
 
 // `matched` says whether a real dish rule fired. When nothing matched we fall
 // back to versatile guidance, and the answer presents itself that way rather

@@ -84,6 +84,26 @@ export function sourceCarriesMerchant(entry, merchant){
   } catch { return false; }
 }
 
+// The SAME deterministic boundary, applied to the sommelier's optional exact
+// bottle. The model proposes producer, cuvée and vintage as STRUCTURED fields
+// plus its answer-level sourceIds; the bottle renders only when a cited
+// registry entry supports that exact identity. A valid but unrelated source,
+// another wine from the producer, or another vintage yields empty strings —
+// and the general pairing guidance stands on its own either way. The
+// sommelier never displays a price, so no price may pass through here.
+export function verifiedSommelierBottle(fields, sourceIds, evidence){
+  const none = { bottle: '', bottleWhy: '' };
+  if (!fields || typeof fields !== 'object') return none;
+  const ok = verifiedCandidates([{
+    producer: fields.producer, cuvee: fields.cuvee, vintage: fields.vintage,
+    grape: '', region: '', why: typeof fields.why === 'string' ? fields.why : '',
+    sourceIds,
+  }], evidence);
+  if (!ok.length) return none;
+  const b = ok[0];
+  return { bottle: `${b.producer} ${b.name} ${b.vintage}`.replace(/\s+/g, ' ').trim(), bottleWhy: b.why };
+}
+
 export function verifiedCandidates(rawCandidates, evidence){
   const registry = new Map((evidence || []).map((e) => [e.id, e]));
   const out = [];

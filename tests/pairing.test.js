@@ -69,6 +69,41 @@ test('isPairingQuery still routes food questions to the rule set', () => {
   assert.equal(isPairingQuery('pizza'), true);
 });
 
+// ── The classifier requires a pairing SIGNAL, never punctuation ─────
+// An earlier version treated any question containing "?" as a pairing
+// question, which flashed the versatile Pinot Noir card for questions whose
+// honest answers need evidence. These four are ChatGPT-review release
+// blockers and must stay research-first forever.
+
+test('evidence-first questions are NEVER classified as pairing questions', () => {
+  assert.equal(isPairingQuery('Should I buy this bottle?'), false);
+  assert.equal(isPairingQuery('Why do I like Nebbiolo?'), false);
+  assert.equal(isPairingQuery('Is 2021 a good vintage?'), false);
+  assert.equal(isPairingQuery('Barolo vs Barbaresco?'), false);
+  // And the rest of the research-first family stays put.
+  assert.equal(isPairingQuery('Explain Beaujolais'), false);
+  assert.equal(isPairingQuery('Explain Chenin Blanc'), false);
+  assert.equal(isPairingQuery('Best Pinot Noir under $25'), false);
+  assert.equal(isPairingQuery('Similar to Oregon Pinot Noir'), false);
+  assert.equal(isPairingQuery(''), false);
+  assert.equal(isPairingQuery('?'), false, 'a question mark is punctuation, not a dish');
+});
+
+test('genuine food questions keep their instant answer, matched or not', () => {
+  // Matched dish rules.
+  assert.equal(isPairingQuery('steak with mushroom sauce'), true);
+  assert.equal(isPairingQuery('What should I drink with pesto pasta?'), true);
+  // Unmatched but genuinely about food or a meal occasion.
+  assert.equal(isPairingQuery('what goes with pierogi casserole?'), true);
+  assert.equal(isPairingQuery("my grandmother's pierogi casserole"), true);
+  assert.equal(isPairingQuery('What should I open tonight?'), true);
+  assert.equal(isPairingQuery('What should I bring to a dinner party?'), true);
+  assert.equal(isPairingQuery('What food pairs with red wine?'), true);
+  // And each of these still reaches heuristicPairing usefully.
+  assert.equal(heuristicPairing('what goes with pierogi casserole?').matched, false, 'honest versatile fallback');
+  assert.ok(heuristicPairing('what goes with pierogi casserole?').primary.grape);
+});
+
 // ── The pairing-answer standard ─────────────────────────────────────
 // A pairing explanation is incomplete if it only describes abstract
 // characteristics. Every rule must translate them into something findable.

@@ -81,7 +81,7 @@ test('the bought wine enters the personalization pool like any owned bottle', ()
 // ── Wine type: preserved end-to-end, never defaulted to Red ─────────
 
 test('the type travels through the conversion for every kind of wine', () => {
-  for (const type of ['White','Rosé','Sparkling']){
+  for (const type of ['White','Rosé','Sparkling','Fortified']){
     const wine = wishlistToCellarWine({ ...ITEM, type });
     assert.equal(wine.type, type, `${type} stays ${type}`);
   }
@@ -109,6 +109,15 @@ test('type inference is deterministic and never guesses Red for the unknown', ()
   assert.equal(inferWineType({ grape:'Mystery Grape' }), '', 'unknown stays unknown');
   assert.equal(inferWineType({}), '');
   assert.equal(inferWineType({ grape:'Completely Invented', name:'Cuvée X' }), '', 'never Red by default');
+  // Sparkling rosé is Sparkling, not plain Rosé.
+  assert.equal(inferWineType({ name:'Sparkling Rosé' }), 'Sparkling');
+  assert.equal(inferWineType({ name:'Crémant d’Alsace Rosé' }), 'Sparkling');
+  assert.equal(inferWineType({ name:'Brut Rosé Champagne' }), 'Sparkling');
+  // Fortified wines are recognised, and 'Portugal' never masquerades as Port.
+  assert.equal(inferWineType({ name:'Ten Year Tawny Port' }), 'Fortified');
+  assert.equal(inferWineType({ name:'Fino Sherry' }), 'Fortified');
+  assert.equal(inferWineType({ grape:'Touriga Nacional', region:'Douro, Portugal' }), 'Red',
+    'the country Portugal is not the wine Port');
 });
 
 // ── "I bought this": atomic on the server, idempotent under retry ───
