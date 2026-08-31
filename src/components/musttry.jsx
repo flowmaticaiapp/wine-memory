@@ -10,7 +10,7 @@ import { T } from '../lib/data.js';
 import { Icon } from './ui.jsx';
 import { Spinner } from './add.jsx';
 import { V_STATUS } from '../lib/constants.js';
-import { mustTryGuidance, tasteSummary, displayableCandidates, groupedCandidates, readDismissed, addDismissed, withoutDismissed, PERSONAL_MIN } from '../lib/musttry.js';
+import { mustTryGuidance, tasteSummary, displayableCandidates, groupedCandidates, readDismissed, addDismissed, withoutDismissed, PERSONAL_MIN, MUST_TRY_RESEARCH_TIMEOUT_MS } from '../lib/musttry.js';
 import { withTimeout } from '../lib/answerflow.js';
 import * as wl from '../lib/wishlist.js';
 import * as db from '../lib/db.js';
@@ -82,6 +82,7 @@ function MustTryScreen({ wines, userId, onClose, onToast, onPurchased }){
   const guidance = mUM(()=> mustTryGuidance(wines), [wines]);
   const [candidates, setCandidates] = mUS([]);
   const [research, setResearch] = mUS('idle');
+  const [researchMessage, setResearchMessage] = mUS('');
   const [saved, setSaved] = mUS({});          // candidateKey -> 'saved'
   const [dismissed, setDismissed] = mUS(null); // loaded on mount (storage is not render-safe)
   const [pendingBuy, setPendingBuy] = mUS(null);
@@ -94,19 +95,25 @@ function MustTryScreen({ wines, userId, onClose, onToast, onPurchased }){
     if (!supabase){ setResearch('none'); return; }
     let on = true;
     setResearch('searching');
+    const slowTimer = setTimeout(()=>{ if (on) setResearch('searching-slow'); }, 8_000);
     (async()=>{
       try {
-        const r = await withTimeout(invokeAI('must-try', { taste }));
+        const r = await withTimeout(invokeAI('must-try', { taste }), MUST_TRY_RESEARCH_TIMEOUT_MS);
+        clearTimeout(slowTimer);
         const ok = displayableCandidates(r);
         if (!on) return;
         setCandidates(ok);
-        setResearch(ok.length ? 'done' : 'none');
+        setResearch(ok.length ? 'done' : (r?.researchStatus === 'unavailable' ? 'unavailable' : 'none'));
       } catch(e){
+        clearTimeout(slowTimer);
         if (!(e && (e.timeout || e.blocked))) console.error('must-try research failed', e);
-        if (on) setResearch('none');
+        if (on){
+          setResearchMessage(e?.message || '');
+          setResearch(e?.blocked ? 'blocked' : (e?.timeout ? 'timeout' : 'unavailable'));
+        }
       }
     })();
-    return ()=>{ on = false; };
+    return ()=>{ on = false; clearTimeout(slowTimer); };
   }, []);
 
   const visible = withoutDismissed(candidates, dismissed);
@@ -187,9 +194,9 @@ function MustTryScreen({ wines, userId, onClose, onToast, onPurchased }){
         </div>
 
         {/* The verified, actually-recommended bottle layer. */}
-        {research==='searching' && <div style={{ marginTop:16, display:'flex', alignItems:'center', gap:8 }}>
+        {(research==='searching' || research==='searching-slow') && <div style={{ marginTop:16, display:'flex', alignItems:'center', gap:8 }}>
           <Spinner size={13} stroke={2}/>
-          <span style={{ fontSize:11.5, color:T.ink4 }}>Checking credible wine lists and verifying exact bottles…</span>
+          <span style={{ fontSize:11.5, color:T.ink4 }}>{research==='searching-slow' ? 'Still checking several credible lists and verifying exact bottles…' : 'Checking credible wine lists and verifying exact bottles…'}</span>
         </div>}
 
         <BottleSection kind="palate" candidates={grouped.palate} onSave={save} onBuy={buy} onDismiss={dismiss} saved={saved}/>
@@ -198,6 +205,15 @@ function MustTryScreen({ wines, userId, onClose, onToast, onPurchased }){
 
         {research==='none' && <div style={{ marginTop:16, fontSize:12.5, color:T.ink4, lineHeight:1.5 }}>
           No list-backed bottles could be fully verified just now. Nothing unverified has been filled in.
+        </div>}
+        {research==='blocked' && <div style={{ marginTop:16, fontSize:12.5, color:T.ink4, lineHeight:1.5 }}>
+          {researchMessage || 'Must Try research is temporarily unavailable.'}
+        </div>}
+        {research==='timeout' && <div style={{ marginTop:16, fontSize:12.5, color:T.ink4, lineHeight:1.5 }}>
+          Bottle research took too long to finish. Close Must Try and open it again to retry.
+        </div>}
+        {research==='unavailable' && <div style={{ marginTop:16, fontSize:12.5, color:T.ink4, lineHeight:1.5 }}>
+          The public wine-research service is temporarily unavailable. Your Explore Next guidance is still available below.
         </div>}
         {research==='done' && visible.length===0 && <div style={{ marginTop:16, fontSize:12.5, color:T.ink4, lineHeight:1.5 }}>
           You’ve passed on today’s verified bottles. Explore next remains below.

@@ -83,22 +83,27 @@ async function researchCandidates(taste: string): Promise<{ evidence: Evidence[]
   try {
     let messages: unknown[] = [{ role: "user", content: prompt }];
     for (let turn = 0; turn < 3; turn++) {
-      const res = await fetch(ANTHROPIC_URL, {
-        method: "POST",
-        headers: anthropicHeaders(),
-        body: JSON.stringify({
-          model: MODEL,
-          max_tokens: 1400,
-          messages,
-          tools: [{
-            type: "web_search_20250305",
-            name: "web_search",
-            max_uses: MAX_WEB_SEARCHES,
-            blocked_domains: ["vivino.com"],
-          }],
-          tool_choice: { type: "any" },
-        }),
-      });
+      const request = () => fetch(ANTHROPIC_URL, {
+          method: "POST",
+          headers: anthropicHeaders(),
+          body: JSON.stringify({
+            model: MODEL,
+            max_tokens: 1400,
+            messages,
+            tools: [{
+              type: "web_search_20250305",
+              name: "web_search",
+              max_uses: MAX_WEB_SEARCHES,
+              blocked_domains: ["vivino.com"],
+            }],
+            tool_choice: { type: "any" },
+          }),
+        });
+      let res = await request();
+      if (res.status === 429 || res.status >= 500) {
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        res = await request();
+      }
       if (!res.ok) {
         console.error("Must Try research failed", res.status, await res.text());
         return { evidence: [], status: "unavailable" };
@@ -179,9 +184,15 @@ Deno.serve(async (req) => {
       });
     };
 
-    let res = await callClaude(true);
+    let withEffort = true;
+    let res = await callClaude(withEffort);
     if (res.status === 400 && /effort parameter/i.test(await res.clone().text())) {
-      res = await callClaude(false);
+      withEffort = false;
+      res = await callClaude(withEffort);
+    }
+    if (res.status === 429 || res.status >= 500) {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      res = await callClaude(withEffort);
     }
     if (!res.ok) {
       console.error("Anthropic error", res.status, await res.text());

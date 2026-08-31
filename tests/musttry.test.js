@@ -14,8 +14,10 @@ import {
   mustTryGuidance, tasteSummary, displayableCandidates,
   groupedCandidates,
   dismissKeyFor, candidateKey, readDismissed, addDismissed, withoutDismissed, PERSONAL_MIN,
+  MUST_TRY_RESEARCH_TIMEOUT_MS,
 } from '../src/lib/musttry.js';
 import { sourceRecommendsBottle, verifiedCandidates } from '../supabase/functions/_shared/musttry-verify.js';
+import { RESEARCH_TIMEOUT_MS } from '../src/lib/answerflow.js';
 
 function ratedWine(i, over = {}){
   return {
@@ -26,6 +28,11 @@ function ratedWine(i, over = {}){
   };
 }
 const CELLAR = [0,1,2,3,4,5].map(i=>ratedWine(i));
+
+test('Must Try allows time for both web research and bottle verification', () => {
+  assert.ok(MUST_TRY_RESEARCH_TIMEOUT_MS > RESEARCH_TIMEOUT_MS);
+  assert.ok(MUST_TRY_RESEARCH_TIMEOUT_MS <= 60_000, 'the longer request remains bounded');
+});
 
 // ── Instant guidance ────────────────────────────────────────────────
 

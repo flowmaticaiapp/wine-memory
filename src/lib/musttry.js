@@ -9,11 +9,13 @@
 // nothing above the verified-bottles section.
 
 import { personalWines, tasteSignature, regionsYouLove, exploreNext } from './palate.js';
+import { RESEARCH_FIRST_TIMEOUT_MS } from './answerflow.js';
 
 // Same threshold as the Palate gate in main.jsx: below it, claims about "your
 // palate" would be built on almost nothing, so the guidance presents itself as
 // general starting points instead.
 export const PERSONAL_MIN = 5;
+export const MUST_TRY_RESEARCH_TIMEOUT_MS = RESEARCH_FIRST_TIMEOUT_MS;
 
 // ── Instant guidance ────────────────────────────────────────────────
 // Returns { personalized, count, signature, cards } — cards are
