@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 
 import {
   rowToItem, itemToRow, bottleKey, findDuplicate, wishlistToCellarWine, isMissingTable,
+  inferWineType, needsTypeSelection, sanitizeEvidence, purchaseWishlistItem, isTransientError,
 } from '../src/lib/wishlist.js';
 import { personalWines, tasteSignature, regionsYouLove } from '../src/lib/palate.js';
 
@@ -75,6 +76,114 @@ test('the bought wine enters the personalization pool like any owned bottle', ()
   const wine = wishlistToCellarWine(ITEM);
   assert.equal(personalWines([wine]).length, 1);
   assert.equal(personalWines([{ ...wine, sample:true }]).length, 0, 'and the sample rule still governs');
+});
+
+// ── Wine type: preserved end-to-end, never defaulted to Red ─────────
+
+test('the type travels through the conversion for every kind of wine', () => {
+  for (const type of ['White','Rosé','Sparkling']){
+    const wine = wishlistToCellarWine({ ...ITEM, type });
+    assert.equal(wine.type, type, `${type} stays ${type}`);
+  }
+  assert.equal(wishlistToCellarWine(ITEM).type, 'Red', 'an explicit Red stays Red');
+});
+
+test('an unknown type refuses conversion instead of becoming Red', () => {
+  const unknown = { ...ITEM, type:'' };
+  assert.equal(needsTypeSelection(unknown), true);
+  assert.equal(needsTypeSelection(ITEM), false);
+  assert.throws(()=>wishlistToCellarWine(unknown), (e)=> e.needsType === true,
+    'no type and no choice: the conversion must stop and ask');
+  assert.equal(wishlistToCellarWine(unknown, 'White').type, 'White', 'the user’s explicit choice is honoured');
+  assert.equal(wishlistToCellarWine({ ...ITEM, type:'Rosé' }, 'Red').type, 'Rosé',
+    'a known type is never overridden by a stray argument');
+});
+
+test('type inference is deterministic and never guesses Red for the unknown', () => {
+  assert.equal(inferWineType({ grape:'Chardonnay' }), 'White');
+  assert.equal(inferWineType({ grape:'Grüner Veltliner' }), 'White', 'diacritics fold');
+  assert.equal(inferWineType({ grape:'Nebbiolo' }), 'Red');
+  assert.equal(inferWineType({ grape:'Mourvèdre', name:'Bandol Rosé' }), 'Rosé', 'rosé outranks the grape');
+  assert.equal(inferWineType({ name:'NV Brut Champagne' }), 'Sparkling');
+  assert.equal(inferWineType({ name:'Estate Chardonnay' }), 'White', 'a grape in the name counts');
+  assert.equal(inferWineType({ grape:'Mystery Grape' }), '', 'unknown stays unknown');
+  assert.equal(inferWineType({}), '');
+  assert.equal(inferWineType({ grape:'Completely Invented', name:'Cuvée X' }), '', 'never Red by default');
+});
+
+// ── "I bought this": atomic on the server, idempotent under retry ───
+// The database function (buy_wishlist_item) is the atomic step; these tests
+// prove the client orchestration around it: exactly one retry, only for
+// transient failures, and the idempotent server means a retry after a lost
+// response returns the SAME wine rather than a duplicate.
+
+const WINE_ROW = { id:'wine-1', name:'Morgon Côte du Py', verdict:'totry', sample:false };
+
+test('a clean purchase calls the atomic function once', async () => {
+  let calls = 0;
+  const rpc = async ()=>{ calls++; return WINE_ROW; };
+  const wine = await purchaseWishlistItem(rpc, 'item-1', null);
+  assert.equal(calls, 1);
+  assert.equal(wine.id, 'wine-1');
+});
+
+test('a lost response retries once and gets the SAME wine back (no duplicate)', async () => {
+  let calls = 0;
+  const rpc = async ()=>{
+    calls++;
+    if (calls === 1){ const e = new Error('network request failed'); throw e; }
+    // The server committed on the first call; the idempotent replay returns
+    // the wine it already created.
+    return WINE_ROW;
+  };
+  const wine = await purchaseWishlistItem(rpc, 'item-1', null);
+  assert.equal(calls, 2, 'exactly one retry');
+  assert.equal(wine.id, 'wine-1', 'the same wine, not a second one');
+});
+
+test('a persistent transient failure surfaces after one retry — never a retry storm', async () => {
+  let calls = 0;
+  const rpc = async ()=>{ calls++; throw new Error('fetch timeout'); };
+  await assert.rejects(purchaseWishlistItem(rpc, 'item-1', null));
+  assert.equal(calls, 2);
+});
+
+test('a permanent error is not retried', async () => {
+  let calls = 0;
+  const rpc = async ()=>{ calls++; throw new Error('wine type required before conversion'); };
+  await assert.rejects(purchaseWishlistItem(rpc, 'item-1', null), /type required/);
+  assert.equal(calls, 1, 'a rejection the server meant is respected, not hammered');
+});
+
+test('transient detection covers network shapes and nothing else', () => {
+  assert.equal(isTransientError(new Error('Failed to fetch')), true);
+  assert.equal(isTransientError(new Error('request timed out')), true);
+  assert.equal(isTransientError(Object.assign(new Error('x'), { transient:true })), true);
+  assert.equal(isTransientError(new Error('duplicate key value')), false);
+  assert.equal(isTransientError(null), false);
+});
+
+// ── Client-written provenance cannot claim verification ─────────────
+
+test('arbitrary client-written evidence is sanitized on read and grants no claim', () => {
+  const dirty = [
+    { title:'Legit', url:'https://example.com/a' },
+    { title:'Insecure', url:'http://example.com/b' },        // not https
+    { title:'', url:'https://example.com/c' },                // no title
+    { url:'https://example.com/d' },                          // no title at all
+    { title:'No url' },
+    'just a string', null, 42,
+    { title:'Injected', url:'javascript:alert(1)' },
+  ];
+  const clean = sanitizeEvidence(dirty);
+  assert.deepEqual(clean, [{ title:'Legit', url:'https://example.com/a' }]);
+  assert.deepEqual(sanitizeEvidence('nonsense'), []);
+  const item = rowToItem({ id:'x', name:'W', source:'musttry', evidence:dirty, status:'active', created_at:'' });
+  assert.equal(item.evidence.length, 1, 'rowToItem applies the same sanitizer');
+  // And nothing about these fields is a verification: the UI labels such rows
+  // "Saved from Must Try" — provenance `source` requires a server-written
+  // record, which the client cannot fabricate through this table.
+  assert.equal(sanitizeEvidence(dirty).length <= 8, true);
 });
 
 // ── Duplicate handling ──────────────────────────────────────────────

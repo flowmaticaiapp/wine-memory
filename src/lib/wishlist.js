@@ -18,12 +18,28 @@
 
 export const WISHLIST_COLS = 'id,producer,name,vintage,type,grape,region,country,price_expected,why,recommended_by,source,evidence,status,bought_wine_id,created_at';
 
+// Evidence stored on a wishlist row is CLIENT-WRITTEN data coming back from
+// the database — retained for audit, but it can never make the row "verified":
+// any client could write source='musttry' with arbitrary evidence, so the UI
+// must not derive a verification claim from these fields (provenance `source`
+// requires a server-written record, which does not exist yet). This sanitizer
+// additionally drops anything that is not a well-formed https reference.
+export function sanitizeEvidence(evidence){
+  if (!Array.isArray(evidence)) return [];
+  return evidence
+    .filter(e => e && typeof e === 'object'
+      && typeof e.title === 'string' && e.title.trim()
+      && typeof e.url === 'string' && /^https:\/\//i.test(e.url))
+    .slice(0, 8)
+    .map(e => ({ title: e.title.trim(), url: e.url }));
+}
+
 export function rowToItem(r){
   return {
     id: r.id, producer: r.producer || '', name: r.name, vintage: r.vintage || '',
     type: r.type || '', grape: r.grape || '', region: r.region || '', country: r.country || '',
     priceExpected: r.price_expected ?? null, why: r.why || '', recommendedBy: r.recommended_by || '',
-    source: r.source || 'manual', evidence: Array.isArray(r.evidence) ? r.evidence : [],
+    source: r.source || 'manual', evidence: sanitizeEvidence(r.evidence),
     status: r.status || 'active', boughtWineId: r.bought_wine_id || null,
     added: (r.created_at || '').slice(0, 10),
   };
@@ -53,19 +69,60 @@ export function findDuplicate(items, candidate){
   return (items || []).find(i => i.status !== 'bought' && bottleKey(i) === key) || null;
 }
 
+// ── Wine type ───────────────────────────────────────────────────────
+// The type travels Must Try → Wishlist → cellar and an UNKNOWN type is a
+// state, never "Red". This deterministic inference reads grape and name; when
+// nothing matches it returns '' and the UI must ask the user before a cellar
+// conversion.
+const WHITE_GRAPES = ['chardonnay','sauvignon blanc','riesling','chenin','pinot grigio','pinot gris','pinot blanc','albarino','viognier','gruner veltliner','gruner','vermentino','gewurztraminer','assyrtiko','muscadet','melon de bourgogne','verdejo','garganega','semillon','marsanne','roussanne','trebbiano','cortese','falanghina','fiano','godello','torrontes','verdicchio','savagnin','furmint','moschofilero','picpoul','vinho verde','muscat','muller-thurgau','sylvaner','silvaner','arneis','greco','vermentino'];
+const RED_GRAPES = ['cabernet sauvignon','cabernet franc','merlot','pinot noir','syrah','shiraz','grenache','garnacha','malbec','zinfandel','primitivo','sangiovese','nebbiolo','barbera','tempranillo','gamay','mourvedre','monastrell','carignan','nero d','frappato','montepulciano','touriga','bobal','dolcetto','aglianico','mencia','listan prieto','carmenere','petite sirah','petit verdot','tannat','cinsault','corvina','lagrein','blaufrankisch','zweigelt','xinomavro','agiorgitiko','monica','nerello','trousseau','poulsard','schiava','saperavi'];
+const fold = (s)=> String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+export function inferWineType({ grape, name, region } = {}){
+  const hay = fold([grape, name, region].filter(Boolean).join(' '));
+  if (!hay) return '';
+  if (/\bros[e]\b|rosato|rosado|\brose\s+wine\b/.test(hay)) return 'Rosé';
+  if (/champagne|sparkling|\bbrut\b|\bcava\b|prosecco|cremant|spumante|franciacorta|pet[- ]?nat|lambrusco|sekt/.test(hay)) return 'Sparkling';
+  const g = fold(grape);
+  if (g){
+    if (WHITE_GRAPES.some(w => g.includes(w))) return 'White';
+    if (RED_GRAPES.some(r => g.includes(r))) return 'Red';
+  }
+  // A grape word appearing in the NAME counts too (e.g. "Estate Chardonnay").
+  if (WHITE_GRAPES.some(w => hay.includes(w))) return 'White';
+  if (RED_GRAPES.some(r => hay.includes(r))) return 'Red';
+  return '';   // unknown stays unknown — never defaulted
+}
+
+// True when a cellar conversion cannot proceed without the user choosing the
+// wine's type first.
+export function needsTypeSelection(item){
+  return !(item && item.type);
+}
+
 // ── "I bought this" — the ONLY path from Wishlist into the cellar ───
-// Explicit and lossless where it should be, silent where it must be:
+// The authoritative implementation is the buy_wishlist_item() database
+// function in the migration (atomic + idempotent). This mapping documents and
+// tests the intended field semantics, and the SQL mirrors it:
 //   verdict 'totry'  -> the bottle is now OWNED and Unopened
 //   sample  false    -> a bought bottle is real user data, never a demo
 //   price   null     -> price_expected was an expectation, not what was paid;
 //                       carrying it over would fabricate a purchase record
 //   note    <- why   -> the user's own words travel with the bottle
-export function wishlistToCellarWine(item){
+//   type             -> the item's type, or the user's explicit choice;
+//                       an unknown type REFUSES conversion, never becomes Red
+export function wishlistToCellarWine(item, chosenType){
+  const type = item.type || chosenType || '';
+  if (!type){
+    const e = new Error('wine type required before conversion');
+    e.needsType = true;
+    throw e;
+  }
   return {
     producer: item.producer || null,
     name: item.name,
     vintage: item.vintage || null,
-    type: item.type || 'Red',
+    type,
     grape: item.grape || '',
     region: item.region || null,
     country: item.country || null,
@@ -77,6 +134,31 @@ export function wishlistToCellarWine(item){
     where: 'home',
     source: 'wishlist',
   };
+}
+
+// ── Purchase orchestration ──────────────────────────────────────────
+// `rpc` performs the atomic server-side purchase (buy_wishlist_item): insert
+// the cellar wine and resolve the item in ONE transaction, returning the wine
+// — and calling it again for an already-bought item returns the SAME wine
+// (idempotent), so a retry after a lost response can never create a duplicate.
+// This orchestrator adds exactly one retry for transient failures; permanent
+// errors surface to the caller.
+export function isTransientError(e){
+  if (!e) return false;
+  if (e.transient === true) return true;
+  const msg = String(e.message || '');
+  return /network|fetch|timeout|timed out|socket|connection|load failed|failed to fetch/i.test(msg);
+}
+
+export async function purchaseWishlistItem(rpc, itemId, chosenType){
+  try {
+    return await rpc(itemId, chosenType);
+  } catch(e){
+    if (!isTransientError(e)) throw e;
+    // The first call may or may not have committed; the server function is
+    // idempotent either way, so one retry is safe and never duplicates.
+    return await rpc(itemId, chosenType);
+  }
 }
 
 // ── Availability ────────────────────────────────────────────────────

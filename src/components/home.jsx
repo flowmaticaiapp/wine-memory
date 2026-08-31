@@ -8,8 +8,14 @@ function Hamburger({ onClick }){ return <button aria-label="Open menu" onClick={
 function HomeScreen({ wines, onAsk, onMenu, onOpenWine, onCollection, onFavorites, onWishlist, onMustTry, onPairings }){
   const recent=wines.slice().sort((a,b)=>new Date(b.added)-new Date(a.added)).slice(0,6);
   const cards=[['Favorites',onFavorites],['Wishlist',onWishlist],['Must Try',onMustTry],['Pairings',onPairings]];
-  return <div style={{height:'100%',overflowX:'hidden',overflowY:'auto',background:'#fff'}}><div style={{paddingTop:V_STATUS}}/>
-    <header style={{height:56,display:'grid',gridTemplateColumns:'56px 1fr 56px',alignItems:'center',borderBottom:`1px solid ${T.line}`,padding:'0 18px'}}><Hamburger onClick={onMenu}/><div style={{fontFamily:'var(--serif)',fontSize:20,textAlign:'center',color:T.ink}}>Wine Memory</div><div/></header>
+  return <div style={{height:'100%',overflowX:'hidden',overflowY:'auto',background:'#fff'}}>
+    {/* Sticky app bar (same pattern as the Cellar header in visual.jsx): the
+        status-bar space lives INSIDE the sticky element as paddingTop — a
+        separate spacer would scroll away and let content slide under the
+        status area. `paddingTop` is set AFTER the `padding` shorthand so the
+        shorthand cannot overwrite it. Translucent-blur background + zIndex
+        keep scrolling content from showing through. */}
+    <header style={{position:'sticky',top:0,zIndex:30,background:'rgba(255,255,255,0.92)',backdropFilter:'blur(14px)',WebkitBackdropFilter:'blur(14px)',height:56,display:'grid',gridTemplateColumns:'56px 1fr 56px',alignItems:'center',borderBottom:`1px solid ${T.line}`,padding:'0 18px',paddingTop:V_STATUS,boxSizing:'content-box'}}><Hamburger onClick={onMenu}/><div style={{fontFamily:'var(--serif)',fontSize:20,textAlign:'center',color:T.ink}}>Wine Memory</div><div/></header>
     <main style={{padding:'25px 28px',paddingBottom:V_NAV+68}}>
       <h1 style={{margin:0,fontFamily:'var(--sans)',fontSize:45,lineHeight:1.02,letterSpacing:'-2.2px',fontWeight:760,color:T.ink}}>What are we<br/><em style={{fontStyle:'italic'}}>drinking?</em></h1>
       <button onClick={()=>onAsk('')} style={{width:'100%',height:54,marginTop:27,border:`1px solid ${T.line2}`,borderRadius:14,background:'#fff',display:'flex',alignItems:'center',gap:12,padding:'0 16px',cursor:'pointer'}}><Icon name="sparkle" size={17} color={T.ink}/><span style={{flex:1,textAlign:'left',fontSize:15.5,color:T.ink3}}>Ask your sommelier…</span><Icon name="arrow" size={20} color={T.ink}/></button>

@@ -109,7 +109,10 @@ function MustTryScreen({ wines, userId, onClose, onToast }){
       if (wl.findDuplicate(existing, c)){ setSaved(s=>({ ...s, [key]:'saved' })); onToast && onToast('Already on your Wishlist'); return; }
       await db.insertWishlistItem({
         producer:c.producer, name:c.name, vintage:c.vintage, grape:c.grape, region:c.region,
-        type:'', why:c.why, recommendedBy:'', priceExpected: c.price ? c.price.amount : null,
+        // Deterministic inference from grape/name; unknown stays unknown —
+        // the Wishlist purchase flow asks the user rather than assuming Red.
+        type: wl.inferWineType({ grape:c.grape, name:`${c.producer} ${c.name}`, region:c.region }),
+        why:c.why, recommendedBy:'', priceExpected: c.price ? c.price.amount : null,
         source:'musttry', evidence:c.sources,
       });
       setSaved(s=>({ ...s, [key]:'saved' }));

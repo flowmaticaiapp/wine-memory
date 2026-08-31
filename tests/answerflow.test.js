@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  RESEARCH_TIMEOUT_MS, withTimeout, instantPairing, reconcileEnrichment,
+  RESEARCH_TIMEOUT_MS, withTimeout, instantEligible, instantPairing, reconcileEnrichment,
   enrichmentDisposition, pairingBasis,
 } from '../src/lib/answerflow.js';
 import { heuristicPairing } from '../src/lib/pairingrules.js';
@@ -43,6 +43,26 @@ test('a known pairing question yields an instant, useful rule answer', () => {
   assert.equal(INSTANT.primary.grape, 'Syrah');
   assert.equal(INSTANT.basis, 'rule', 'the instant answer declares built-in guidance');
   assert.equal(INSTANT.pendingResearch, true, 'research is still running behind it');
+});
+
+test('EVERY pairing question renders instantly — matched rule or versatile fallback', () => {
+  // Matched dish rules.
+  assert.equal(instantEligible('steak with mushroom sauce'), true);
+  assert.equal(instantEligible('spicy tomato pasta'), true);
+  // Pairing questions no rule recognises still render instantly — the honest
+  // versatile card, then research enriches or corrects.
+  assert.equal(instantEligible('What should I open tonight?'), true);
+  assert.equal(instantEligible('What should I bring to a dinner party?'), true);
+  assert.equal(instantEligible('what goes with pierogi casserole?'), true);
+  // And the versatile instant answer presents itself honestly.
+  assert.equal(VERSATILE.matched, false);
+  assert.equal(VERSATILE.basis, 'rule');
+  assert.ok(VERSATILE.primary.grape, 'still a useful recommendation');
+  // Non-pairing questions keep research-first waiting.
+  assert.equal(instantEligible('Explain Beaujolais'), false);
+  assert.equal(instantEligible('Best Pinot Noir under $25'), false);
+  assert.equal(instantEligible(''), false);
+  assert.equal(instantEligible(null), false);
 });
 
 test('the timeout is firm and flags itself', async () => {
@@ -104,10 +124,24 @@ test('less-specific research never replaces region-level rule guidance', () => {
   assert.equal(rec.reason, 'less_specific');
 });
 
-test('a non-pairing research result cannot touch a pairing answer', () => {
+test('a matched rule answer is never replaced by prose or malformed results', () => {
   assert.equal(reconcileEnrichment(INSTANT, { kind:'answer', text:'Some essay.' }).accepted, false);
   assert.equal(reconcileEnrichment(INSTANT, null).accepted, false);
   assert.equal(reconcileEnrichment(INSTANT, { kind:'pairing', primary:{} }).accepted, false);
+});
+
+test('the versatile fallback for a non-dish question is corrected by a written answer', () => {
+  // "Barolo vs Barbaresco?" trips isPairingQuery ("?"), gets the honest
+  // versatile card instantly, and the model's real answer then corrects the
+  // MODE — the card said only "a versatile starting point", so this is a
+  // correction, never a flip of dish-specific advice.
+  const rec = reconcileEnrichment(VERSATILE, { kind:'answer', text:'Barolo is… Barbaresco is…', sources:[], researchStatus:'no_evidence' });
+  assert.equal(rec.accepted, true);
+  assert.equal(rec.data.mode, 'answer');
+  assert.equal(rec.data.basis, 'no_evidence');
+  const cited = reconcileEnrichment(VERSATILE, { kind:'answer', text:'Cited answer.', sources:SOURCED });
+  assert.equal(cited.data.basis, 'researched');
+  assert.equal(reconcileEnrichment(VERSATILE, { kind:'answer', text:'   ' }).accepted, false, 'empty prose corrects nothing');
 });
 
 test('when the instant answer was the versatile fallback, a real pairing wins', () => {

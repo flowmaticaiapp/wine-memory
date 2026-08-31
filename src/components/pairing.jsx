@@ -14,7 +14,7 @@ import { personalWines } from '../lib/palate.js';
 import { DISH_RULES, DEFAULT_RULE, priceLimit, isPairingQuery, heuristicPairing, pairingHeadline } from '../lib/pairingrules.js';
 import { textMatchesAnyGrape } from '../lib/grapes.js';
 import { readLastAnswer, writeLastAnswer } from '../lib/lastanswer.js';
-import { withTimeout, instantPairing, reconcileEnrichment, enrichmentDisposition, pairingBasis } from '../lib/answerflow.js';
+import { withTimeout, instantEligible, instantPairing, reconcileEnrichment, enrichmentDisposition, pairingBasis } from '../lib/answerflow.js';
 import { supabase } from '../lib/supabase.js';
 import { invokeAI } from '../lib/ai.js';
 import { track } from '../lib/analytics.js';
@@ -186,6 +186,11 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
   const [saved, setSaved] = pUS(false);
   const [showWhy, setShowWhy] = pUS(false);   // depth stays closed by default
   const didInit = pUR(false);
+  // Leaving the screen invalidates every pending screen update: late research
+  // may still upgrade the per-user cache for its own question, but it must
+  // never call state setters on an unmounted screen.
+  const mounted = pUR(true);
+  pUE(()=>{ mounted.current = true; return ()=>{ mounted.current = false; }; }, []);
 
   // Restore the last answer. Someone standing in a shop whose phone locks, or
   // who walks into a dead spot between the door and the shelf, should not lose
@@ -229,11 +234,15 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     });
     if (where === 'discard') return;
     const final = rec.accepted
-      ? { ...rec.data, owned: ownedMatches(rec.data, wines) }
+      ? (rec.data.mode === 'pairing'
+          ? { ...rec.data, owned: ownedMatches(rec.data, wines) }
+          : rec.data)                              // mode correction → written answer
       : { ...initial, pendingResearch:false };
     if (where === 'cache_only'){ if (rec.accepted) remember(final, Q); return; }
     remember(final, Q);
+    if (!mounted.current) return;                  // cache updated; screen is gone
     setData(final);
+    if (final.mode === 'answer') setPhase('answer');
   };
 
   const run = async (query)=>{
@@ -241,14 +250,16 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     const token = ++runCounter;
     setAsked(Q); setQ(Q); track('sommelier_question');
 
-    // A KNOWN food-pairing request (a reviewed dish rule matches) renders the
-    // built-in guidance immediately — local data, no network in the way — and
-    // researches in the background. Everything else keeps research-first
-    // waiting: exact bottles, vintages, critics, prices and open questions
-    // cannot be answered honestly without evidence, so they earn the spinner —
-    // now behind a firm timeout so it can never spin indefinitely.
+    // EVERY food-pairing question renders useful guidance immediately — the
+    // matched dish rule when one fires, the honest "versatile starting point"
+    // otherwise — with research enriching (or, for the unmatched fallback,
+    // correcting) in the background. Only questions that are not pairing
+    // questions at all keep research-first waiting: exact bottles, vintages,
+    // critics, prices and explainers cannot be answered honestly without
+    // evidence, so they earn the spinner — behind a firm timeout so it can
+    // never spin indefinitely.
     const h = heuristicPairing(Q);
-    if (h.matched){
+    if (instantEligible(Q)){
       const initial = { ...instantPairing(h), owned: ownedMatches(h, wines) };
       setData(initial); remember(initial, Q); setPhase('pairing');
       enrich(Q, initial, token);
@@ -259,7 +270,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     try {
       if (!supabase) throw new Error('not configured');
       const r = await withTimeout(askSommelier(Q, wines));   // model classifies pairing vs. answer
-      if (token !== runCounter) return;                     // superseded while waiting
+      if (token !== runCounter || !mounted.current) return; // superseded, or the screen is gone
       if (r && r.kind==='pairing' && r.primary){
         const out = { dish:r.dish||Q, primary:r.primary, others:r.others||[], avoid:[], avoidNote:r.avoidNote||'',
           sources:r.sources||[], researchStatus:r.researchStatus||'no_evidence', limit:priceLimit(Q) };
@@ -275,7 +286,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
         const err = new Error('empty sommelier result'); err.unusable = true; throw err;
       }
     } catch(e){
-      if (token !== runCounter) return;                     // superseded while waiting
+      if (token !== runCounter || !mounted.current) return; // superseded, or the screen is gone
       console.error('sommelier failed', e);
       // Graceful fallback: pairing questions still get a useful answer. Track
       // WHY we fell back so the disclosure tells the truth — "unavailable" and

@@ -25,8 +25,11 @@
 //      - research that is LESS SPECIFIC than the rule (no region-level
 //        guidance where the rule had one) is discarded.
 //   3. If the instant answer was the unmatched VERSATILE fallback, a real
-//      pairing result from research always wins — the model understood a dish
-//      the rules did not, which is exactly the case research exists for.
+//      result from research always wins — a pairing (the model understood a
+//      dish the rules did not) or a written answer (the question was never a
+//      dish at all, and the fallback said only "a versatile starting point",
+//      so correcting the mode is honesty, not a flip). A MATCHED rule answer
+//      is never replaced by a written answer.
 //   4. A verified bottle survives only when cited sources came back with it —
 //      the server already enforces the evidence registry; this is the
 //      client-side belt to the server's braces.
@@ -34,6 +37,17 @@
 //      kept, and its avoid note survives unless research brought its own.
 
 import { textMatchesAnyGrape } from './grapes.js';
+import { isPairingQuery } from './pairingrules.js';
+
+// The gate the UI uses to choose between the instant path and research-first
+// waiting. EVERY question isPairingQuery() identifies renders immediately —
+// the matched dish rule when one fires, the honest versatile fallback
+// otherwise. Kept here, not inline in the component, so the gate itself is
+// under test: an earlier draft quietly narrowed it to matched rules only,
+// which no test could see.
+export function instantEligible(query){
+  return isPairingQuery(String(query ?? ''));
+}
 
 // Firm ceiling on any research round-trip. Background enrichment that misses
 // it is quietly dropped (the rule answer is already on screen); a
@@ -68,11 +82,23 @@ export function instantPairing(heuristic){
 export function reconcileEnrichment(initial, researched){
   if (!initial || initial.mode !== 'pairing') return { accepted:false, reason:'no_initial' };
   const r = researched;
+  const ruleMatched = initial.matched === true;
+
+  // The versatile fallback fired for a question that was never a dish
+  // ("Barolo vs Barbaresco?"): the model's written answer corrects the mode.
+  // A matched dish rule is NEVER replaced by prose.
+  if (!ruleMatched && r && r.kind === 'answer' && typeof r.text === 'string' && r.text.trim()){
+    const sources = Array.isArray(r.sources) ? r.sources : [];
+    return { accepted:true, data:{
+      mode:'answer', text:r.text.trim(), sources,
+      basis: sources.length ? 'researched' : (r.researchStatus || 'no_evidence'),
+      enriched:true, pendingResearch:false,
+    } };
+  }
+
   if (!r || r.kind !== 'pairing' || !r.primary || typeof r.primary.grape !== 'string' || !r.primary.grape){
     return { accepted:false, reason:'not_pairing' };
   }
-
-  const ruleMatched = initial.matched === true;
 
   if (ruleMatched){
     // Less specific than the rule: a matched rule always carries region-level

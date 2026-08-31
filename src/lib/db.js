@@ -3,7 +3,7 @@
 // so queries never need an explicit user filter.
 import { supabase } from './supabase.js';
 import { STORAGE_PREFIX, PHOTO_URL_TTL_SECONDS, storagePath } from './photopath.js';
-import { WISHLIST_COLS, rowToItem as wishlistRowToItem, itemToRow as wishlistItemToRow } from './wishlist.js';
+import { WISHLIST_COLS, rowToItem as wishlistRowToItem, itemToRow as wishlistItemToRow, purchaseWishlistItem } from './wishlist.js';
 
 export { storagePath };
 
@@ -167,14 +167,25 @@ export async function removeWishlistItem(id){
   if (error) throw error;
 }
 
-// Marks the item bought and records which cellar wine it became. The caller
-// inserts the cellar wine FIRST (through insertWine) so a failure here never
-// loses the bottle the user just bought.
-export async function markWishlistBought(id, wineId){
-  const { error } = await supabase.from('wishlist')
-    .update({ status: 'bought', bought_wine_id: wineId ?? null, resolved_at: new Date().toISOString() })
-    .eq('id', id);
-  if (error) throw error;
+// "I bought this": ONE atomic, idempotent database call (buy_wishlist_item in
+// the migration) inserts the cellar wine and resolves the item in the same
+// transaction; replaying it for an already-bought item returns the same wine,
+// so the single client retry below can never create a duplicate.
+function rawWineToClient(r){
+  if (!r) return null;
+  const { tastes_like, pairs_with, user_id, created_at, ...rest } = r;   // eslint-disable-line no-unused-vars
+  return { ...rest, tastesLike: tastes_like ?? [], pairsWith: pairs_with ?? [],
+    photo: null, photoPath: r.photo ?? null };   // a just-bought wine has no photo to sign
+}
+
+export async function buyWishlistItem(itemId, chosenType){
+  const rpc = async (id, type)=>{
+    const { data, error } = await supabase.rpc('buy_wishlist_item', { p_item_id: id, p_type: type ?? null });
+    if (error) throw error;
+    return Array.isArray(data) ? data[0] : data;
+  };
+  const row = await purchaseWishlistItem(rpc, itemId, chosenType);
+  return rawWineToClient(row);
 }
 
 // ── dining experiences ──────────────────────────────────────────────

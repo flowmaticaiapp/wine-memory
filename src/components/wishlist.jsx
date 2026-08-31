@@ -42,7 +42,7 @@ function WishlistRow({ item, onBought, onRemove, busy }){
       <div style={{ display:'flex', flexWrap:'wrap', gap:'3px 12px', marginTop:7 }}>
         {item.priceExpected != null && <span style={{ fontSize:12, color:T.ink3 }}>Expect around ${item.priceExpected}</span>}
         {item.recommendedBy && <span style={{ fontSize:12, color:T.ink3 }}>Recommended by {item.recommendedBy}</span>}
-        {item.source==='musttry' && (item.evidence||[]).length>0 && <span style={{ fontSize:12, color:T.buy }}>Saved from a source-verified Must Try</span>}
+        {item.source==='musttry' && <span style={{ fontSize:12, color:T.ink3 }}>Saved from Must Try</span>}
       </div>
       <div style={{ display:'flex', gap:9, marginTop:12 }}>
         <button disabled={busy} onClick={()=>onBought(item)} style={{ flex:1, padding:'11px', borderRadius:11, border:'none', background:T.ink, color:'#fff', fontFamily:'var(--sans)', fontSize:13.5, fontWeight:680, cursor:busy?'default':'pointer', opacity:busy?0.6:1 }}>I bought this</button>
@@ -54,7 +54,7 @@ function WishlistRow({ item, onBought, onRemove, busy }){
 
 // ── "A wine to try" — the manual entry form ─────────────────────────
 function WineToTryForm({ onSave, onCancel, duplicateOf, onSaveAnyway }){
-  const [f, setF] = wUS({ name:'', producer:'', vintage:'', priceExpected:'', grape:'', region:'', type:'Red', why:'', recommendedBy:'' });
+  const [f, setF] = wUS({ name:'', producer:'', vintage:'', priceExpected:'', grape:'', region:'', type:'', why:'', recommendedBy:'' });
   const set = (k)=> (e)=> setF(v=>({ ...v, [k]: e.target.value }));
   const canSave = f.name.trim().length > 0;
   const build = ()=> ({
@@ -77,6 +77,7 @@ function WineToTryForm({ onSave, onCancel, duplicateOf, onSaveAnyway }){
           <div><div style={label}>Grape</div><input value={f.grape} onChange={set('grape')} placeholder="e.g. Gamay" style={inputStyle}/></div>
           <div><div style={label}>Type</div>
             <select value={f.type} onChange={set('type')} style={{ ...inputStyle, appearance:'auto' }}>
+              <option value="">Not sure yet</option>
               {['Red','White','Rosé','Sparkling','Dessert'].map(t=><option key={t} value={t}>{t}</option>)}
             </select></div>
         </div>
@@ -99,12 +100,13 @@ function WineToTryForm({ onSave, onCancel, duplicateOf, onSaveAnyway }){
 
 // ── The screen ──────────────────────────────────────────────────────
 // status: loading | ready | unavailable (migration not applied) | error
-function WishlistScreen({ onClose, onAddToCellar, onToast }){
+function WishlistScreen({ onClose, onPurchased, onToast }){
   const [items, setItems] = wUS([]);
   const [status, setStatus] = wUS('loading');
   const [mode, setMode] = wUS('list');        // list | form
   const [dup, setDup] = wUS(null);            // duplicate found on save attempt
   const [busyId, setBusyId] = wUS(null);
+  const [pendingBuy, setPendingBuy] = wUS(null); // item awaiting a type choice
 
   wUE(()=>{ let on = true;
     (async()=>{
@@ -131,18 +133,27 @@ function WishlistScreen({ onClose, onAddToCellar, onToast }){
     finally { setBusyId(null); }
   };
 
-  const bought = async (item)=>{
-    setBusyId(item.id);
+  // "I bought this" — one atomic, idempotent database call (see the
+  // buy_wishlist_item migration function): the cellar wine and the resolved
+  // item succeed together, and a retry after a lost response returns the same
+  // wine instead of creating a duplicate. A bottle with no known type asks
+  // for one first — it is never defaulted to Red.
+  const bought = (item)=>{
+    if (wl.needsTypeSelection(item)){ setPendingBuy(item); return; }
+    doBuy(item, null);
+  };
+  const doBuy = async (item, chosenType)=>{
+    setPendingBuy(null); setBusyId(item.id);
     try {
-      // Cellar first, then resolve — a failure after the insert can never lose
-      // the bottle the user just bought.
-      const wine = await onAddToCellar(wl.wishlistToCellarWine(item));
-      try { await db.markWishlistBought(item.id, wine && wine.id); }
-      catch(e){ console.error('wishlist resolve failed (wine saved)', e); }
+      const wine = await db.buyWishlistItem(item.id, chosenType);
       setItems(list=>list.filter(i=>i.id!==item.id));
+      if (wine && onPurchased) onPurchased(wine);
       track('wishlist_bought');
       onToast && onToast('Added to your cellar as Unopened');
-    } catch(e){ console.error('wishlist bought failed', e); onToast && onToast('Could not add to your cellar'); }
+    } catch(e){
+      if (e && /type required/i.test(String(e.message||''))){ setPendingBuy(item); return; }
+      console.error('wishlist bought failed', e); onToast && onToast('Could not add to your cellar');
+    }
     finally { setBusyId(null); }
   };
 
@@ -185,6 +196,21 @@ function WishlistScreen({ onClose, onAddToCellar, onToast }){
           {items.map(i=> <WishlistRow key={i.id} item={i} busy={busyId===i.id} onBought={bought} onRemove={remove}/>)}
         </>}
       </div>
+
+      {/* The type question, asked at the moment it matters: an unknown bottle
+          is never silently filed as Red. */}
+      {pendingBuy && <div role="dialog" aria-label="What kind of wine is it?" style={{ position:'absolute', inset:0, zIndex:90, background:'rgba(23,21,15,.3)', display:'flex', alignItems:'flex-end' }} onClick={()=>setPendingBuy(null)}>
+        <div onClick={e=>e.stopPropagation()} style={{ width:'100%', background:'#fff', borderRadius:'20px 20px 0 0', padding:'20px 18px calc(20px + env(safe-area-inset-bottom))', boxShadow:'0 -8px 30px rgba(23,21,15,.18)' }}>
+          <div style={{ fontFamily:'var(--serif)', fontSize:20, color:T.ink }}>What kind of wine is it?</div>
+          <div style={{ fontSize:13, color:T.ink2, lineHeight:1.5, marginTop:6 }}>{pendingBuy.producer ? pendingBuy.producer+' ' : ''}{pendingBuy.name} doesn’t have a type yet — pick one so it’s filed correctly.</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:15 }}>
+            {['Red','White','Rosé','Sparkling','Dessert'].map(t=>(
+              <button key={t} onClick={()=>doBuy(pendingBuy, t)} style={{ padding:'13px', borderRadius:12, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:14.5, fontWeight:650, cursor:'pointer' }}>{t}</button>
+            ))}
+            <button onClick={()=>setPendingBuy(null)} style={{ padding:'13px', borderRadius:12, border:'none', background:T.raised, color:T.ink2, fontFamily:'var(--sans)', fontSize:14, fontWeight:600, cursor:'pointer' }}>Cancel</button>
+          </div>
+        </div>
+      </div>}
     </div>
   );
 }

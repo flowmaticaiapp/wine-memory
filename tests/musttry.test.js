@@ -104,39 +104,100 @@ test('a price renders only when merchant-sourced; otherwise it is omitted, not g
 });
 
 // ── The server boundary (shared with the Edge Function) ─────────────
+// A valid sourceId is NOT evidence: the cited entry must itself support the
+// candidate's producer, cuvée AND vintage; a price additionally needs its
+// amount and merchant context in a source that supports the same bottle.
 
+const FOILLARD = { producer:'Jean Foillard', cuvee:'Morgon Côte du Py', vintage:'2021', grape:'Gamay', region:'Beaujolais', why:'ok' };
 const REGISTRY = [
-  { id:1, title:'Producer page', url:'https://producer.example/wine' },
-  { id:2, title:'Merchant listing', url:'https://shop.example/listing' },
+  { id:1, title:'Jean Foillard — Morgon Côte du Py', url:'https://producer.example/cote-du-py',
+    citedText:'Jean Foillard’s Morgon Côte du Py 2021 comes from old vines on the Py hill.' },
+  { id:2, title:'Good Wine Shop — Foillard Morgon', url:'https://goodwineshop.example/foillard-morgon-2021',
+    citedText:'Jean Foillard Morgon Côte du Py 2021 — in stock at Good Wine Shop for $34.99.' },
+  { id:3, title:'Ten great Beaujolais crus', url:'https://magazine.example/beaujolais-guide',
+    citedText:'Beaujolais offers wonderful value across Morgon, Fleurie and Brouilly.' },       // real, but unrelated
+  { id:4, title:'Good Wine Shop — Chinon 2020', url:'https://goodwineshop.example/chinon-2020',
+    citedText:'Olga Raffault Chinon 2020 — $24.99 at Good Wine Shop.' },                     // a merchant, wrong bottle
+  { id:5, title:'Jean Foillard — Morgon Côte du Py 2019', url:'https://producer.example/cote-du-py-2019',
+    citedText:'Jean Foillard Morgon Côte du Py 2019 was a structured vintage.' },            // right wine, WRONG vintage
 ];
 
-test('the server keeps only candidates whose sourceIds map to real evidence', () => {
-  const out = verifiedCandidates([
-    { producer:'A', cuvee:'Cuvée One', vintage:'2021', grape:'Syrah', region:'Rhône', why:'ok', sourceIds:[1] },
-    { producer:'B', cuvee:'Cuvée Two', vintage:'2020', grape:'Gamay', region:'Beaujolais', why:'invented', sourceIds:[99] },
-    { producer:'C', cuvee:'Cuvée Three', vintage:'2019', grape:'Barbera', region:'Asti', why:'none', sourceIds:[] },
-    { producer:'D', cuvee:'', vintage:'2019', grape:'x', region:'x', why:'no cuvee', sourceIds:[1] },
-    { producer:'E', cuvee:'Cuvée Five', vintage:'', grape:'x', region:'x', why:'no vintage', sourceIds:[1] },
-  ], REGISTRY);
-  assert.equal(out.length, 1);
-  assert.equal(out[0].producer, 'A');
-  assert.deepEqual(out[0].sources, [{ title:'Producer page', url:'https://producer.example/wine' }]);
+test('a candidate needs a source that actually supports producer, cuvée and vintage', () => {
+  const [ok] = verifiedCandidates([{ ...FOILLARD, sourceIds:[1] }], REGISTRY);
+  assert.ok(ok, 'a genuinely supporting citation passes');
+  assert.deepEqual(ok.sources, [{ title:'Jean Foillard — Morgon Côte du Py', url:'https://producer.example/cote-du-py' }]);
 });
 
-test('the server passes a price through only with a merchant and a real price source', () => {
-  const base = { producer:'A', cuvee:'One', vintage:'2021', grape:'', region:'', why:'', sourceIds:[1] };
-  const [withPrice] = verifiedCandidates([{ ...base, price:34, merchant:'Shop', priceSourceId:2 }], REGISTRY);
-  assert.deepEqual(withPrice.price, { amount:34, merchant:'Shop', source:{ title:'Merchant listing', url:'https://shop.example/listing' } });
-  const [noSrc] = verifiedCandidates([{ ...base, price:34, merchant:'Shop', priceSourceId:99 }], REGISTRY);
-  assert.equal(noSrc.price, null);
-  const [noMerchant] = verifiedCandidates([{ ...base, price:34, priceSourceId:2 }], REGISTRY);
-  assert.equal(noMerchant.price, null);
-  const [free] = verifiedCandidates([{ ...base, price:0, merchant:'Shop', priceSourceId:2 }], REGISTRY);
-  assert.equal(free.price, null, 'a non-positive price is noise, not data');
+test('ADVERSARIAL: a valid but unrelated sourceId is not evidence — candidate rejected', () => {
+  assert.equal(verifiedCandidates([{ ...FOILLARD, sourceIds:[3] }], REGISTRY).length, 0,
+    'a real Beaujolais article that never mentions the bottle supports nothing');
+  assert.equal(verifiedCandidates([{ ...FOILLARD, sourceIds:[4] }], REGISTRY).length, 0,
+    'a real merchant page for a different bottle supports nothing');
+  assert.equal(verifiedCandidates([{ ...FOILLARD, sourceIds:[5] }], REGISTRY).length, 0,
+    'the same wine in a different vintage is a different bottle');
+  assert.equal(verifiedCandidates([{ ...FOILLARD, sourceIds:[99] }], REGISTRY).length, 0, 'an invented id maps to nothing');
+  assert.equal(verifiedCandidates([{ ...FOILLARD, sourceIds:[] }], REGISTRY).length, 0);
+});
+
+test('unsupporting citations are stripped even when one source genuinely supports', () => {
+  const [ok] = verifiedCandidates([{ ...FOILLARD, sourceIds:[1,3,4] }], REGISTRY);
+  assert.equal(ok.sources.length, 1, 'only the supporting source decorates the bottle');
+  assert.equal(ok.sources[0].url, 'https://producer.example/cote-du-py');
+});
+
+test('identity fields are required regardless of sources', () => {
+  assert.equal(verifiedCandidates([{ ...FOILLARD, cuvee:'', sourceIds:[1] }], REGISTRY).length, 0);
+  assert.equal(verifiedCandidates([{ ...FOILLARD, vintage:'', sourceIds:[1] }], REGISTRY).length, 0);
+  assert.equal(verifiedCandidates([{ ...FOILLARD, producer:'', sourceIds:[1] }], REGISTRY).length, 0);
+});
+
+test('a price passes only with bottle + amount + merchant context in its own source', () => {
+  const [ok] = verifiedCandidates([{ ...FOILLARD, sourceIds:[1], price:34.99, merchant:'Good Wine Shop', priceSourceId:2 }], REGISTRY);
+  assert.deepEqual(ok.price, { amount:34.99, merchant:'Good Wine Shop',
+    source:{ title:'Good Wine Shop — Foillard Morgon', url:'https://goodwineshop.example/foillard-morgon-2021' } });
+});
+
+test('ADVERSARIAL: price sources that do not demonstrably support the claim are refused', () => {
+  const base = { ...FOILLARD, sourceIds:[1], merchant:'Good Wine Shop' };
+  const drop = (over)=> verifiedCandidates([{ ...base, ...over }], REGISTRY)[0].price;
+  assert.equal(drop({ price:34.99, priceSourceId:3 }), null, 'an unrelated publication cannot price a bottle');
+  assert.equal(drop({ price:34.99, priceSourceId:4 }), null, 'a merchant listing for a DIFFERENT bottle cannot price this one');
+  assert.equal(drop({ price:34.99, priceSourceId:5 }), null, 'a listing for a different vintage cannot price this one');
+  assert.equal(drop({ price:29.99, priceSourceId:2 }), null, 'the source must state THIS amount');
+  assert.equal(drop({ price:34, priceSourceId:2 }), null, 'a $34.99 listing does not support a claim of exactly $34');
+  assert.equal(drop({ price:34.99, priceSourceId:2, merchant:'Some Other Shop' }), null, 'the source must carry THIS merchant');
+  assert.equal(drop({ price:34.99, priceSourceId:99 }), null, 'an invented price source id maps to nothing');
+  assert.equal(drop({ price:0, priceSourceId:2 }), null, 'a non-positive price is noise, not data');
+  assert.equal(drop({ price:34.99 }), null, 'no price source at all');
+});
+
+test('a model-provided merchant name plus a valid identity source is insufficient', () => {
+  // The identity source (1) is real and supports the bottle — but it is a
+  // producer page, not a merchant listing, and it never states the price.
+  const [c] = verifiedCandidates([{ ...FOILLARD, sourceIds:[1], price:34.99, merchant:'Good Wine Shop', priceSourceId:1 }], REGISTRY);
+  assert.equal(c.price, null);
+});
+
+test('merchant context may come from the hostname when the text omits the name', () => {
+  const reg = [...REGISTRY,
+    { id:6, title:'Foillard Morgon Côte du Py 2021', url:'https://goodwineshop.example/p/12345',
+      citedText:'Jean Foillard Morgon Côte du Py 2021 — $34.99.' }];
+  const [c] = verifiedCandidates([{ ...FOILLARD, sourceIds:[1], price:34.99, merchant:'goodwineshop', priceSourceId:6 }], reg);
+  assert.deepEqual(c.price.source.url, 'https://goodwineshop.example/p/12345');
+});
+
+test('amount matching respects digit boundaries', () => {
+  const reg = [{ id:1, title:'Jean Foillard Morgon Côte du Py 2034 club', url:'https://x.example/a',
+    citedText:'Jean Foillard Morgon Côte du Py 2021, bottle number 2034, sells for $34.00 at Good Wine Shop.' }];
+  const base = { ...FOILLARD, sourceIds:[1], merchant:'Good Wine Shop' };
+  const [ok] = verifiedCandidates([{ ...base, price:34, priceSourceId:1 }], reg);
+  assert.ok(ok.price, '"$34.00" supports amount 34');
+  const [bad] = verifiedCandidates([{ ...base, price:203, priceSourceId:1 }], reg);
+  assert.equal(bad.price, null, '"2034" never supports amount 203');
 });
 
 test('the shortlist is capped at three', () => {
-  const many = [0,1,2,3,4].map(i=>({ producer:'P'+i, cuvee:'C'+i, vintage:'2021', grape:'', region:'', why:'', sourceIds:[1] }));
+  const many = [0,1,2,3,4].map(()=>({ ...FOILLARD, sourceIds:[1] }));
   assert.equal(verifiedCandidates(many, REGISTRY).length, 3);
 });
 

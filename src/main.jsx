@@ -173,10 +173,10 @@ function VApp({ session }){
     else { flash('Added to your collection'); if(!saved.photo) setPhotoNudge(saved); }
   }catch(e){ console.error(e); flash('Could not save'); } };
   const addMany=async(arr)=>{ const saved=await db.insertWines(userId, arr); setWines(ws=>[...saved,...ws]); return saved; };
-  // "I bought this" on a Wishlist item: a real cellar insert through the
-  // normal path (so the wine is genuine user data), without closing the
-  // Wishlist screen the user is standing in.
-  const addWineFromWishlist=async(w)=>{ const saved=await db.insertWine(userId, w); setWines(ws=>[saved,...ws]); track('wine_added', { source:'wishlist' }); return saved; };
+  // "I bought this" happens ATOMICALLY in the database (buy_wishlist_item);
+  // the screen hands back the created cellar wine and this just adds it to
+  // local state, without closing the Wishlist screen the user is standing in.
+  const wishlistPurchased=(saved)=>{ setWines(ws=>[saved,...ws]); track('wine_added', { source:'wishlist' }); };
   const viewToTry=()=>{ setOverlay(null); setTab('collection'); setFilter('totry'); };
   const clearSamples=async()=>{ try{ await db.deleteSamples(); setWines(ws=>ws.filter(w=>!w.sample)); }catch(e){ console.error(e); } };
   const ask=(q)=>{ setSeed(q||''); setOverlay('search'); };
@@ -214,7 +214,7 @@ function VApp({ session }){
       {overlay==='import' && <OrderImport onClose={()=>setOverlay(null)} onAddMany={addMany} onViewToTry={viewToTry}/>}
       {overlay==='search' && <PairingSearch wines={wines} userId={userId} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} initialQuery={seed} onSavePairing={savePairing}/>}
       {overlay==='pairinghome' && <PairingHome onBack={()=>setOverlay(null)} onMenu={()=>setOverlay('menu')} onAsk={ask}/>}
-      {overlay==='wishlist' && <WishlistScreen onClose={()=>setOverlay(null)} onAddToCellar={addWineFromWishlist} onToast={flash}/>}
+      {overlay==='wishlist' && <WishlistScreen onClose={()=>setOverlay(null)} onPurchased={wishlistPurchased} onToast={flash}/>}
       {overlay==='musttry' && <MustTryScreen wines={wines} userId={userId} onClose={()=>setOverlay(null)} onToast={flash}/>}
       {overlay==='favorites' && <FavoritesComing onClose={()=>setOverlay(null)} onBuyAgain={()=>{ setOverlay(null); setTab('collection'); setFilter('buy'); }}/>}
       {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining} recent={dining}/>}
