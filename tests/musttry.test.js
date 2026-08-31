@@ -162,6 +162,8 @@ test('ADVERSARIAL: price sources that do not demonstrably support the claim are 
   const drop = (over)=> verifiedCandidates([{ ...base, ...over }], REGISTRY)[0].price;
   assert.equal(drop({ price:34.99, priceSourceId:3 }), null, 'an unrelated publication cannot price a bottle');
   assert.equal(drop({ price:34.99, priceSourceId:4 }), null, 'a merchant listing for a DIFFERENT bottle cannot price this one');
+  assert.equal(drop({ price:24.99, priceSourceId:4 }), null,
+    'even when the other bottle’s listing states this exact amount and merchant, it does not support THIS bottle');
   assert.equal(drop({ price:34.99, priceSourceId:5 }), null, 'a listing for a different vintage cannot price this one');
   assert.equal(drop({ price:29.99, priceSourceId:2 }), null, 'the source must state THIS amount');
   assert.equal(drop({ price:34, priceSourceId:2 }), null, 'a $34.99 listing does not support a claim of exactly $34');
