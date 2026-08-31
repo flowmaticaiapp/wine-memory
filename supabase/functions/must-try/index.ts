@@ -1,16 +1,11 @@
-// must-try — Supabase Edge Function (Deno). NOT DEPLOYED by this bundle;
-// deploying it (test project first) requires explicit approval.
+// must-try — Supabase Edge Function (Deno).
 //
-// Researches exact-bottle candidates for the Must Try screen. The screen's
-// personalized guidance is built CLIENT-SIDE from the user's real palate data
-// and never waits on this function; this function only supplies the optional
-// "verified bottles" layer, so it may fail, time out, or return nothing and
-// the screen stays useful.
+// Researches exact-bottle candidates for the Must Try screen. Bottles lead the
+// page; client-side grape and region guidance remains as an honest fallback.
 //
 // Evidence rules (same registry discipline as the sommelier function):
-//   * candidates come from the model, but only survive when producer, cuvée
-//     and vintage are present AND at least one sourceId maps to a real cited
-//     evidence entry (_shared/musttry-verify.js is the boundary);
+//   * candidates survive only when one source verifies exact identity AND a
+//     second, independently checked source actually recommends the bottling;
 //   * a price survives only with its own price source and a named merchant —
 //     time-sensitive "listed at" data, never a market price;
 //   * the model can never mint a URL: citations come from the research pass.
@@ -25,7 +20,7 @@ import { verifiedCandidates } from "../_shared/musttry-verify.js";
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const MODEL = Deno.env.get("SOMMELIER_MODEL") ?? "claude-sonnet-4-6";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const MAX_WEB_SEARCHES = 3;
+const MAX_WEB_SEARCHES = 5;
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -39,7 +34,7 @@ const SCHEMA = {
   properties: {
     candidates: {
       type: "array",
-      description: "Up to 3 exact bottles the evidence registry verifies. Empty when nothing verifies — an empty list is a correct answer, never a failure.",
+      description: "Up to 6 exact, list-recommended bottles the evidence registry verifies. Empty when nothing verifies — an empty list is a correct answer, never a failure.",
       items: {
         type: "object",
         additionalProperties: false,
@@ -49,13 +44,14 @@ const SCHEMA = {
           vintage: { type: "string", description: "The exact vintage the evidence supports, or 'NV' for a non-vintage bottling. Never a guessed or transferred vintage." },
           grape: { type: "string" },
           region: { type: "string" },
-          why: { type: "string", description: "One or two sentences: why this bottle fits the stated taste, grounded in the evidence." },
+          category: { type: "string", enum: ["palate", "essential", "branch"], description: "palate only with a real taste profile; essential for benchmark bottles; branch for a purposeful departure." },
           sourceIds: { type: "array", items: { type: "integer" }, description: "Registry IDs that verify THIS bottle's identity. Empty disqualifies the candidate." },
+          recommendationSourceIds: { type: "array", items: { type: "integer" }, description: "Registry IDs whose cited text names this bottling and explicitly recommends it as a must-try, essential, benchmark, top pick, or bottle worth seeking. Empty disqualifies the candidate." },
           price: { type: "number", description: "A listed price ONLY when a registry entry from a merchant currently lists this exact bottle at this price. Omit otherwise." },
           merchant: { type: "string", description: "The merchant listing that price. Empty when price is absent." },
           priceSourceId: { type: "integer", description: "The registry ID of the merchant listing supporting the price. Absent when price is absent." },
         },
-        required: ["producer", "cuvee", "vintage", "grape", "region", "why", "sourceIds"],
+        required: ["producer", "cuvee", "vintage", "grape", "region", "category", "sourceIds", "recommendationSourceIds"],
       },
     },
   },
@@ -74,11 +70,13 @@ function anthropicHeaders(): Record<string, string> {
 
 async function researchCandidates(taste: string): Promise<{ evidence: Evidence[]; status: "researched" | "no_evidence" | "unavailable" }> {
   const prompt =
-    `Research SPECIFIC, currently purchasable bottles matching this taste profile: ${taste}\n\n` +
+    `Research SPECIFIC bottles that credible sommeliers, wine educators, respected wine publications, or credible wine-lover editorial lists call must-try, essential, benchmark, iconic, a top pick, or worth seeking.\n\n` +
+    `Taste profile: ${taste}\n\n` +
     `You MUST perform web search. Search narrowly and cite every factual research note. ` +
     `Formulate search terms only from grape, region, style, vintage, critic, and budget concepts. Never put a person's name, address, email, account detail, private note, or cellar contents into a search query. ` +
-    `Favour producer pages, appellation bodies, reputable merchants, and respected wine publications. ` +
-    `For each promising bottle, verify producer, cuvée and vintage together on the same source. Keep vintage-specific facts attached to that vintage. ` +
+    `Prioritize genuine editorial recommendations from sommeliers, educators and respected publications. Publicly accessible recommendations from James Suckling, Wine Access, and Wine for Normal People are useful when directly relevant, but never force or imply their support. ` +
+    `For every promising bottle capture (1) a recommendation or list citation naming producer and cuvée, and (2) an identity citation verifying producer, cuvée and exact vintage together. One source may do both when its cited text truly supports both. ` +
+    `Use producer pages and appellation bodies for identity, and reputable merchants only for an optional current price. ` +
     `Note a price only when a merchant page currently lists that exact bottle and vintage at that price, and name the merchant. ` +
     `Return concise research notes, not a consumer answer. If nothing verifies, say so plainly.`;
 
@@ -141,9 +139,9 @@ Deno.serve(async (req) => {
     // user's REAL palate data (samples already excluded there): grapes,
     // regions, traits, budget. Plain text, length-capped, no identity.
     const taste = typeof body.taste === "string" ? body.taste.trim().slice(0, 400) : "";
-    if (taste.length < 3) return json({ candidates: [], researchStatus: "no_evidence" });
+    const profile = taste.length >= 3 ? taste : "No personal taste profile yet; build a balanced introductory list.";
 
-    const research = await researchCandidates(taste);
+    const research = await researchCandidates(profile);
     if (!research.evidence.length) {
       // Nothing cited — nothing can verify, so don't ask the model to try.
       return json({ candidates: [], researchStatus: research.status });
@@ -156,12 +154,14 @@ Deno.serve(async (req) => {
     const prompt =
       `You select "Must Try" bottle candidates for a personal wine app.\n\n` +
       `The evidence registry below is the ONLY authority for bottle identity, vintages, prices, and availability. ` +
-      `Propose at most 3 bottles, and ONLY bottles whose producer, cuvée and vintage the registry verifies together. ` +
+      `Propose at most 6 bottles. Every bottle needs BOTH: sourceIds verifying producer, cuvée and vintage together, and recommendationSourceIds whose cited text names producer and cuvée and explicitly recommends the bottling. ` +
+      `Classify each as palate, essential, or branch. Use palate only when a real taste profile is present and the bottle genuinely aligns with it; essential means a benchmark or widely recommended wine-lover bottle; branch means a purposeful expansion from the profile rather than a random pick. ` +
+      `Aim for one or two strong bottles per applicable category; quality of evidence matters more than filling sections. ` +
       `Never transfer a fact, score, or price between vintages. Never invent an ID, title, URL, or source. ` +
       `Include price, merchant and priceSourceId ONLY when a registry entry from a merchant currently lists that exact bottle and vintage at that price. ` +
       `An empty candidates list is a correct answer when nothing verifies.\n\n` +
       `EVIDENCE REGISTRY:\n${evidenceText}\n\n` +
-      `TASTE PROFILE: ${taste}`;
+      `TASTE PROFILE: ${profile}`;
 
     const callClaude = (withEffort: boolean): Promise<Response> => {
       const output_config: Record<string, unknown> = { format: { type: "json_schema", schema: SCHEMA } };
@@ -190,7 +190,12 @@ Deno.serve(async (req) => {
     const data = await res.json();
     const text = [...(data.content ?? [])].reverse().find((b: { type: string }) => b.type === "text")?.text ?? "{}";
     const parsed = JSON.parse(text);
-    const candidates = verifiedCandidates(parsed.candidates, research.evidence);
+    // With no real palate profile, the model has no authority to call any
+    // bottle personalized. Preserve the bottle, but place it with essentials.
+    const proposed = Array.isArray(parsed.candidates)
+      ? parsed.candidates.map((c: Record<string, unknown>) => (!taste && c?.category === "palate" ? { ...c, category:"essential" } : c))
+      : [];
+    const candidates = verifiedCandidates(proposed, research.evidence, { requireRecommendation:true, max:6 });
     return json({ candidates, researchStatus: candidates.length ? "researched" : "no_evidence" });
   } catch (e) {
     console.error("must-try error", e);

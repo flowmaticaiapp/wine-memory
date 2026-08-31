@@ -12,9 +12,10 @@ import assert from 'node:assert/strict';
 
 import {
   mustTryGuidance, tasteSummary, displayableCandidates,
+  groupedCandidates,
   dismissKeyFor, candidateKey, readDismissed, addDismissed, withoutDismissed, PERSONAL_MIN,
 } from '../src/lib/musttry.js';
-import { verifiedCandidates } from '../supabase/functions/_shared/musttry-verify.js';
+import { sourceRecommendsBottle, verifiedCandidates } from '../supabase/functions/_shared/musttry-verify.js';
 
 function ratedWine(i, over = {}){
   return {
@@ -69,7 +70,7 @@ test('the taste summary carries concepts, never names, notes, or bottles', () =>
   assert.ok(!/Producer \d|Wine \d|private note/i.test(s), 'no producers, bottle names, or notes');
 });
 
-test('no taste summary without personalization — nothing is sent for research', () => {
+test('no taste summary without personalization — research receives no private palate claim', () => {
   assert.equal(tasteSummary(CELLAR.slice(0,2)), '');
   assert.equal(tasteSummary(CELLAR.map(w=>({ ...w, sample:true }))), '');
 });
@@ -79,6 +80,8 @@ test('no taste summary without personalization — nothing is sent for research'
 const GOOD = {
   producer:'Jean Foillard', name:'Morgon Côte du Py', vintage:'2021', grape:'Gamay', region:'Beaujolais',
   why:'Cited.', sources:[{ title:'Producer', url:'https://example.com/wine' }],
+  recommendationSources:[{ title:'Sommelier essentials', url:'https://example.com/essential' }],
+  category:'essential',
   price:{ amount:34, merchant:'Good Wine Shop', source:{ title:'Listing', url:'https://example.com/listing' } },
 };
 
@@ -90,7 +93,22 @@ test('a candidate renders only with full identity and cited sources', () => {
   assert.equal(displayableCandidates({ candidates:[{ ...GOOD, sources:[{ title:'x', url:'http://insecure' }] }] }).length, 0, 'citations must be https');
   assert.equal(displayableCandidates({ candidates:[{ ...GOOD, sources:undefined }] }).length, 0, 'a malformed response neither renders nor throws');
   assert.equal(displayableCandidates({ candidates:[{ ...GOOD, sources:'not-a-list' }] }).length, 0);
+  assert.equal(displayableCandidates({ candidates:[{ ...GOOD, recommendationSources:[] }] }).length, 0, 'identity evidence alone is not a recommendation');
+  assert.equal(displayableCandidates({ candidates:[{ ...GOOD, recommendationSources:[{ title:'x', url:'http://insecure' }] }] }).length, 0);
   assert.equal(displayableCandidates(null).length, 0);
+});
+
+test('displayed bottles are grouped in the approved page order', () => {
+  const candidates = [
+    { ...GOOD, category:'branch' },
+    { ...GOOD, vintage:'2022', category:'palate' },
+    { ...GOOD, vintage:'2020', category:'essential' },
+  ];
+  const personalized = groupedCandidates(candidates, true);
+  assert.equal(personalized.palate.length, 1);
+  assert.equal(personalized.essential.length, 1);
+  assert.equal(personalized.branch.length, 1);
+  assert.equal(groupedCandidates(candidates, false).palate.length, 0, 'new users never receive a made-up palate section');
 });
 
 test('a price renders only when merchant-sourced; otherwise it is omitted, not guessed', () => {
@@ -120,12 +138,42 @@ const REGISTRY = [
     citedText:'Olga Raffault Chinon 2020 — $24.99 at Good Wine Shop.' },                     // a merchant, wrong bottle
   { id:5, title:'Jean Foillard — Morgon Côte du Py 2019', url:'https://producer.example/cote-du-py-2019',
     citedText:'Jean Foillard Morgon Côte du Py 2019 was a structured vintage.' },            // right wine, WRONG vintage
+  { id:6, title:'A sommelier’s essential Beaujolais bottles', url:'https://magazine.example/sommelier-essentials',
+    citedText:'Our sommelier recommends Jean Foillard Morgon Côte du Py as a benchmark bottle every wine lover should try.' },
+  { id:7, title:'Beaujolais essentials', url:'https://magazine.example/generic-essentials',
+    citedText:'Our essential Beaujolais list includes several benchmark Morgon producers.' }, // signal, but no bottle
+  { id:8, title:'Foillard Fleurie essential', url:'https://magazine.example/fleurie-essential',
+    citedText:'Jean Foillard Fleurie is a must-try bottle.' },                                 // producer, wrong cuvée
 ];
 
 test('a candidate needs a source that actually supports producer, cuvée and vintage', () => {
   const [ok] = verifiedCandidates([{ ...FOILLARD, sourceIds:[1] }], REGISTRY);
   assert.ok(ok, 'a genuinely supporting citation passes');
   assert.deepEqual(ok.sources, [{ title:'Jean Foillard — Morgon Côte du Py', url:'https://producer.example/cote-du-py' }]);
+});
+
+test('Must Try additionally requires a source that actually recommends this bottling', () => {
+  const proposed = { ...FOILLARD, sourceIds:[1], recommendationSourceIds:[6], category:'essential' };
+  const [ok] = verifiedCandidates([proposed], REGISTRY, { requireRecommendation:true, max:6 });
+  assert.ok(ok);
+  assert.deepEqual(ok.recommendationSources, [{ title:'A sommelier’s essential Beaujolais bottles', url:'https://magazine.example/sommelier-essentials' }]);
+  assert.equal(ok.category, 'essential');
+});
+
+test('ADVERSARIAL: existence, a generic list, or a sibling cuvée cannot masquerade as a recommendation', () => {
+  const verify = (recommendationSourceIds) => verifiedCandidates([
+    { ...FOILLARD, sourceIds:[1], recommendationSourceIds },
+  ], REGISTRY, { requireRecommendation:true, max:6 });
+  assert.equal(verify([1]).length, 0, 'a producer identity page is not a recommendation');
+  assert.equal(verify([7]).length, 0, 'a generic regional list that omits the bottle supports nothing');
+  assert.equal(verify([8]).length, 0, 'a recommendation for another cuvée cannot transfer');
+  assert.equal(verify([]).length, 0);
+  assert.equal(sourceRecommendsBottle(REGISTRY[5], FOILLARD), true);
+  assert.equal(sourceRecommendsBottle({
+    title:'Jean Foillard Morgon Côte du Py',
+    url:'https://example.com/must-try/jean-foillard-morgon-cote-du-py',
+    citedText:'Jean Foillard Morgon Côte du Py 2021.',
+  }, FOILLARD), false, 'recommendation words in a URL slug are not editorial evidence');
 });
 
 test('ADVERSARIAL: a verified Must Try identity cannot carry a fabricated critic claim', () => {
@@ -207,9 +255,18 @@ test('amount matching respects digit boundaries', () => {
   assert.equal(bad.price, null, '"2034" never supports amount 203');
 });
 
-test('the shortlist is capped at three', () => {
-  const many = [0,1,2,3,4].map(()=>({ ...FOILLARD, sourceIds:[1] }));
-  assert.equal(verifiedCandidates(many, REGISTRY).length, 3);
+test('the ordinary shortlist stays capped at three and Must Try may show six unique bottles', () => {
+  const registry = [];
+  const many = [0,1,2,3,4,5,6].map((n)=>{
+    const cuvee = `Morgon Côte du Py Reserve ${n}`;
+    registry.push({ id:n+20, title:`Jean Foillard ${cuvee} 2021`, url:`https://producer.example/${n}`,
+      citedText:`Jean Foillard ${cuvee} 2021.` });
+    registry.push({ id:n+40, title:`Essential ${cuvee}`, url:`https://magazine.example/${n}`,
+      citedText:`A sommelier recommends Jean Foillard ${cuvee} as a must-try bottle.` });
+    return { ...FOILLARD, cuvee, sourceIds:[n+20], recommendationSourceIds:[n+40] };
+  });
+  assert.equal(verifiedCandidates(many, registry).length, 3);
+  assert.equal(verifiedCandidates(many, registry, { requireRecommendation:true, max:6 }).length, 6);
 });
 
 // ── "Not for me" ────────────────────────────────────────────────────

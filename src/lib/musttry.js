@@ -1,6 +1,6 @@
-// musttry.js — the Must Try screen's brain: instant personalized guidance from
-// the user's REAL palate data, plus the client-side rules for the optional
-// verified-bottle layer that research adds in the background.
+// musttry.js — the Must Try screen's brain: researched bottle recommendations
+// lead; instant personalized grape and region guidance remains available under
+// Explore next.
 //
 // Guidance is built from the same sample-excluded engine as everything else
 // that makes a claim about the user (personalWines / tasteSignature /
@@ -66,31 +66,50 @@ export function tasteSummary(wines){
 
 // ── Client-side belt for the verified-bottle layer ──────────────────
 // The Edge Function already filters through its evidence registry; the client
-// re-checks the contract so a malformed or stale response can never render an
-// unverified bottle or an unsourced price.
+// re-checks the contract so a malformed or stale response can never render a
+// bottle without both exact identity support and a real recommendation source.
 export function displayableCandidates(response){
   const list = Array.isArray(response?.candidates) ? response.candidates : [];
   const out = [];
+  const seen = new Set();
   for (const c of list){
     if (!c || typeof c !== 'object') continue;
     if (!c.producer || !c.name || !c.vintage) continue;
     if (!Array.isArray(c.sources) || !c.sources.length) continue;
     const sources = c.sources.filter(s => s && typeof s.url === 'string' && /^https:\/\//i.test(s.url));
     if (!sources.length) continue;
+    if (!Array.isArray(c.recommendationSources) || !c.recommendationSources.length) continue;
+    const recommendationSources = c.recommendationSources
+      .filter(s => s && typeof s.url === 'string' && /^https:\/\//i.test(s.url));
+    if (!recommendationSources.length) continue;
+    const key = candidateKey(c);
+    if (seen.has(key)) continue;
+    seen.add(key);
     let price = null;
     const p = c.price;
     if (p && typeof p.amount === 'number' && isFinite(p.amount) && p.amount > 0
         && typeof p.merchant === 'string' && p.merchant
         && p.source && typeof p.source.url === 'string'){
-      price = { amount:p.amount, merchant:p.merchant, source:p.source };
+      if (/^https:\/\//i.test(p.source.url)) price = { amount:p.amount, merchant:p.merchant, source:p.source };
     }
     // Client belt matching the server boundary: a bottle-specific reason is
     // unverified prose and never renders, even from a stale or rogue response.
     out.push({ producer:c.producer, name:c.name, vintage:String(c.vintage),
-      grape:c.grape||'', region:c.region||'', why:'', sources, price });
-    if (out.length >= 3) break;
+      grape:c.grape||'', region:c.region||'', why:'',
+      category:['palate','essential','branch'].includes(c.category) ? c.category : 'essential',
+      sources, recommendationSources, price });
+    if (out.length >= 6) break;
   }
   return out;
+}
+
+export function groupedCandidates(candidates, personalized){
+  const list = Array.isArray(candidates) ? candidates : [];
+  return {
+    palate: personalized ? list.filter(c => c.category === 'palate') : [],
+    essential: list.filter(c => c.category === 'essential' || (!c.category && c)),
+    branch: list.filter(c => c.category === 'branch'),
+  };
 }
 
 // ── "Not for me" — explicit user reactions, on-device for now ───────

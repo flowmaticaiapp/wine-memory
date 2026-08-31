@@ -37,6 +37,13 @@ function haystackOf(entry){
   return fold([entry?.title, entry?.citedText, entry?.url].filter(Boolean).join(' '));
 }
 
+function editorialHaystackOf(entry){
+  // A URL slug such as /must-try-wines is not evidence that the cited passage
+  // recommends this bottle. The signal must be present in the page title or
+  // the citation text returned by web research.
+  return fold([entry?.title, entry?.citedText].filter(Boolean).join(' '));
+}
+
 function vintageSupported(hay, vintage){
   const v = fold(vintage);
   if (!v) return false;
@@ -56,6 +63,24 @@ export function sourceSupportsBottle(entry, { producer, cuvee, vintage }){
   return p.every(t => hay.includes(t))
     && c.every(t => hay.includes(t))
     && vintageSupported(hay, vintage);
+}
+
+// Must Try is not a catalogue search. A source proving that a bottle exists
+// is necessary, but it does not prove that a sommelier, educator, publication
+// or wine-lover list actually recommends it. This second boundary requires
+// the source to name the producer + cuvee and carry an explicit editorial
+// recommendation signal. Vintage is deliberately not required here: enduring
+// benchmark lists often recommend a bottling across releases, while the
+// separate identity boundary still verifies the exact vintage shown.
+const RECOMMENDATION_SIGNAL = /\bmust[- ]try\b|\bessential\b|\bbenchmark\b|\biconic\b|\bbucket[- ]list\b|\b(?:best|top)\s+(?:wine|wines|bottle|bottles|pick|picks)\b|\brecommend(?:ed|ation|ations|s)?\b|\bsommelier(?:'s|s')?\s+(?:pick|picks|choice|choices|selection|selections)\b|\bwine\s+lover(?:'s|s')?\b|\bbottles?\s+(?:every\s+wine\s+lover\s+should|to)\s+(?:try|seek|buy)\b|\bwines?\s+to\s+(?:try|seek|buy)\b|\bworth\s+(?:trying|seeking)\b/i;
+
+export function sourceRecommendsBottle(entry, { producer, cuvee }){
+  const hay = editorialHaystackOf(entry);
+  if (!hay || !RECOMMENDATION_SIGNAL.test(hay)) return false;
+  const p = nameTokens(producer);
+  const c = nameTokens(cuvee);
+  if (!p.length || !c.length) return false;
+  return p.every(t => hay.includes(t)) && c.every(t => hay.includes(t));
 }
 
 // Does this entry state the price amount? Accepts 34, 34.00, $34, 34,99 —
@@ -109,9 +134,12 @@ export function verifiedSommelierBottle(fields, sourceIds, evidence){
   return { bottle: `${b.producer} ${b.name} ${b.vintage}`.replace(/\s+/g, ' ').trim(), bottleWhy: '' };
 }
 
-export function verifiedCandidates(rawCandidates, evidence){
+export function verifiedCandidates(rawCandidates, evidence, options = {}){
+  const requireRecommendation = options.requireRecommendation === true;
+  const max = Number.isInteger(options.max) && options.max > 0 ? Math.min(options.max, 10) : 3;
   const registry = new Map((evidence || []).map((e) => [e.id, e]));
   const out = [];
+  const seen = new Set();
   for (const c of (Array.isArray(rawCandidates) ? rawCandidates : [])){
     if (!c || typeof c !== 'object') continue;
     const producer = typeof c.producer === 'string' ? c.producer.trim() : '';
@@ -130,6 +158,19 @@ export function verifiedCandidates(rawCandidates, evidence){
     if (!supporting.length) continue;                // no real support, no candidate
     const sources = supporting.map(({ title, url }) => ({ title, url }));
 
+    const recommendationIds = Array.isArray(c.recommendationSourceIds)
+      ? [...new Set(c.recommendationSourceIds.filter((n) => Number.isInteger(n) && registry.has(n)))]
+      : [];
+    const recommending = recommendationIds
+      .map((id) => registry.get(id))
+      .filter((e) => sourceRecommendsBottle(e, { producer, cuvee }));
+    if (requireRecommendation && !recommending.length) continue;
+    const recommendationSources = recommending.map(({ title, url }) => ({ title, url }));
+
+    const identityKey = `${fold(producer).replace(/\s+/g, ' ').trim()}|${fold(cuvee).replace(/\s+/g, ' ').trim()}|${fold(vintage).trim()}`;
+    if (seen.has(identityKey)) continue;
+    seen.add(identityKey);
+
     // A price needs its own source that supports the same bottle, states the
     // amount, and carries the merchant context. Otherwise: omitted.
     let price = null;
@@ -147,15 +188,16 @@ export function verifiedCandidates(rawCandidates, evidence){
       producer, name: cuvee, vintage,
       grape: typeof c.grape === 'string' ? c.grape.trim() : '',
       region: typeof c.region === 'string' ? c.region.trim() : '',
+      category: ['palate','essential','branch'].includes(c.category) ? c.category : 'essential',
       // A verified IDENTITY does not verify the model's REASON. The proposed
       // `why` is free prose that can carry a fabricated score, critic claim,
       // award, tasting note, or drinking window past an honestly-supported
       // bottle. Until each such claim gets its own deterministic evidence
       // verification, no bottle-specific reason leaves this boundary.
       why: '',
-      sources, price,
+      sources, recommendationSources, price,
     });
-    if (out.length >= 3) break;                      // a shortlist, not a catalogue
+    if (out.length >= max) break;                    // a shortlist, not a catalogue
   }
   return out;
 }
