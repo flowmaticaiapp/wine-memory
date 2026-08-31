@@ -21,13 +21,14 @@ import { PairingSearch } from './components/pairing.jsx';
 import { PairingHome } from './components/pairinghome.jsx';
 import { WishlistScreen } from './components/wishlist.jsx';
 import { MustTryScreen } from './components/musttry.jsx';
-import { FavoritesComing } from './components/favorites.jsx';
+import { FavoritesScreen } from './components/favorites.jsx';
 import { DiningOut } from './components/diningout.jsx';
 import { LearnReader } from './components/TodaysPour.jsx';
 import { supabase, supabaseConfigured } from './lib/supabase.js';
 import * as db from './lib/db.js';
 import { track } from './lib/analytics.js';
 import { AuthScreen, FullScreenLoader, signOut } from './components/Auth.jsx';
+import { favoriteTags } from './lib/favorites.js';
 
 const VTWEAKS = {
   columns: '2',
@@ -190,6 +191,22 @@ function VApp({ session }){
     track('wine_removed');
     flash('Removed from your cellar');
   }catch(e){ console.error('remove wine failed', e); flash('Could not remove this bottle'); throw e; } };
+  const toggleFavorite=async(id,favorite)=>{
+    const current = wines.find(w=>w.id===id);
+    if (!current || current.sample) return;
+    const tags = favoriteTags(current.tags, favorite);
+    setWines(ws=>ws.map(w=>w.id===id?{...w,tags}:w));
+    try {
+      await db.updateWine(id,{tags});
+      track(favorite?'favorite_added':'favorite_removed');
+      flash(favorite?'Added to Favorites':'Removed from Favorites');
+    } catch(e){
+      console.error('favorite update failed', e);
+      setWines(ws=>ws.map(w=>w.id===id?{...w,tags:current.tags}:w));
+      flash('Could not update Favorites');
+      throw e;
+    }
+  };
   const saveDining=async({experience,pairing})=>{ try{ const saved=await db.insertDining(userId,experience); setDining(ds=>[saved,...ds]); track('dining_saved'); }catch(e){ console.error("save dining failed", e); flash("Could not save dining"); } if(pairing){ try{ const sp=await db.insertPairing(userId,pairing); setPairings(ps=>[sp,...ps]); }catch(e){ console.error(e); } } };
 
   const navTo=(t)=>{ setOverlay(null); setTab(t); };
@@ -223,11 +240,11 @@ function VApp({ session }){
       {overlay==='pairinghome' && <PairingHome onBack={()=>setOverlay(null)} onMenu={()=>setOverlay('menu')} onAsk={ask}/>}
       {overlay==='wishlist' && <WishlistScreen onClose={()=>setOverlay(null)} onPurchased={wishlistPurchased} onToast={flash}/>}
       {overlay==='musttry' && <MustTryScreen wines={wines} userId={userId} onClose={()=>setOverlay(null)} onToast={flash} onPurchased={wishlistPurchased}/>}
-      {overlay==='favorites' && <FavoritesComing onClose={()=>setOverlay(null)} onBuyAgain={()=>{ setOverlay(null); setTab('collection'); setFilter('buy'); }}/>}
+      {overlay==='favorites' && <FavoritesScreen wines={wines} onClose={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onToggle={toggleFavorite}/>}
       {overlay==='diningout' && <DiningOut onClose={()=>setOverlay(null)} onSave={saveDining} recent={dining}/>}
       {overlay==='pour' && <LearnReader onClose={()=>setOverlay(null)} onExplore={()=>{ setOverlay(null); setTab('learn'); }}/>}
       {overlay==='menu' && <NavigationDrawer email={session.user.email} userId={userId} onClose={()=>setOverlay(null)} go={(id)=>{ if(id==='pairings')setOverlay('pairinghome'); else if(id==='tonight')ask('What should I open tonight?'); else if(id==='diningout')setOverlay('diningout'); else if(id==='addhub')setOverlay('addhub'); else if(id==='favorites')setOverlay('favorites'); else if(id==='wishlist')setOverlay('wishlist'); else if(id==='musttry')setOverlay('musttry'); else {setOverlay(null);setTab(id)}}}/>}
-      {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} onAddPhoto={addPhoto} onDelete={removeWine} verdictVariant={t.verdictStyle}/>}
+      {detail && <VisualDetail wine={detail} all={wines} onBack={()=>setOverlay(null)} onOpen={(id)=>setOverlay({detail:id})} onUpdate={updateWine} onAddPhoto={addPhoto} onDelete={removeWine} onFavorite={toggleFavorite} verdictVariant={t.verdictStyle}/>}
 
       {onboarding && wines.length===0 && <Onboarding onSnap={()=>{ finishOnboarding(); setOverlay('snap'); }} onSkip={finishOnboarding}/>}
       {firstSuccess && <FirstSuccess wine={firstSuccess} onAsk={(q)=>{ setFirstSuccess(null); ask(q); }} onAddAnother={()=>{ setFirstSuccess(null); setOverlay('addhub'); }}/>}

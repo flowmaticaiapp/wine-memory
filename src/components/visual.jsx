@@ -7,6 +7,7 @@ import { BottlePhoto, FlavorBars } from './bottle.jsx';
 import { V_STATUS, V_NAV, CONTENT_W, famOf, FAM_NEUTRAL_HUE, clamp } from '../lib/constants.js';
 import { fileToJpegDataUrl } from '../lib/image.js';
 import { DrinkContext } from './savemode.jsx';
+import { isFavorite } from '../lib/favorites.js';
 
 const { useState: vUS, useMemo: vUM, useEffect: vUE, useRef: vUR } = React;
 
@@ -160,12 +161,13 @@ function EmptyFilter({ filter }){
 // ════════════════════════════════════════════════════════
 //  DETAIL
 // ════════════════════════════════════════════════════════
-function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, onDelete, verdictVariant='expressive' }){
+function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, onDelete, onFavorite, verdictVariant='expressive' }){
   const [editing, setEditing] = vUS(false);
   const [draft, setDraft] = vUS(wine.note||'');
   const [photoBusy, setPhotoBusy] = vUS(false);
   const [confirmDelete, setConfirmDelete] = vUS(false);
   const [deleteBusy, setDeleteBusy] = vUS(false);
+  const [favoriteBusy, setFavoriteBusy] = vUS(false);
   const photoInputRef = vUR(null);
   vUE(()=>{ setDraft(wine.note||''); setEditing(false); },[wine.id]);
   const onPhotoFile = async (e)=>{
@@ -183,6 +185,12 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, onDelet
     setDeleteBusy(true);
     try { await onDelete(wine); }
     finally { setDeleteBusy(false); }
+  };
+  const toggleFavorite = async ()=>{
+    if (!onFavorite || favoriteBusy || wine.sample) return;
+    setFavoriteBusy(true);
+    try { await onFavorite(wine.id, !isFavorite(wine)); }
+    finally { setFavoriteBusy(false); }
   };
   const fam = famOf(wine.family);
   const famHue = fam ? fam.hue : FAM_NEUTRAL_HUE;
@@ -214,6 +222,7 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, onDelet
             <button onClick={onBack} style={{ width:40, height:40, borderRadius:99, border:'none', cursor:'pointer', background:'rgba(255,255,255,0.9)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 2px 8px rgba(0,0,0,0.1)' }}><Icon name="back" size={21} color={T.ink}/></button>
           </div>
           <div style={{ position:'absolute', top:V_STATUS+2, right:16, display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8 }}>
+            {!wine.sample && <button onClick={toggleFavorite} disabled={favoriteBusy} aria-label={isFavorite(wine)?'Remove from Favorites':'Add to Favorites'} style={{ width:40, height:40, borderRadius:99, border:'none', cursor:favoriteBusy?'default':'pointer', background:'rgba(255,255,255,0.92)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 2px 8px rgba(0,0,0,0.1)', opacity:favoriteBusy?0.65:1 }}><Icon name={isFavorite(wine)?'starFill':'star'} size={20} color={isFavorite(wine)?'#a67c24':T.ink}/></button>}
             <VerdictBadge id={wine.verdict} variant="expressive"/>
             {wine.sample && <span style={{ fontFamily:'var(--mono)', fontSize:9.5, fontWeight:600, color:'#fff', background:'rgba(17,17,19,0.6)', padding:'3px 8px', borderRadius:6, letterSpacing:0.4, textTransform:'uppercase' }}>Sample</span>}
           </div>
