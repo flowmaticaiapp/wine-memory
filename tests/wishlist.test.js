@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import {
   rowToItem, itemToRow, bottleKey, findDuplicate, wishlistToCellarWine, isMissingTable,
   inferWineType, needsTypeSelection, sanitizeEvidence, purchaseWishlistItem, isTransientError,
+  mustTryCandidateToWishlistItem,
 } from '../src/lib/wishlist.js';
 import { personalWines, tasteSignature, regionsYouLove } from '../src/lib/palate.js';
 
@@ -51,6 +52,22 @@ test('palate calculations read only the wines list; wishlist items never enter i
 
 test('the client never sets user_id — ownership comes from auth, so it cannot be spoofed', () => {
   assert.ok(!('user_id' in itemToRow(ITEM)));
+});
+
+test('Must Try save and purchase share one complete, deduplicated wishlist shape', () => {
+  const rec = { title:'Sommelier list', url:'https://editor.example/list' };
+  const identity = { title:'Producer', url:'https://producer.example/wine' };
+  const price = { title:'Merchant', url:'https://shop.example/wine' };
+  const item = mustTryCandidateToWishlistItem({
+    producer:'Jean Foillard', name:'Morgon Côte du Py', vintage:'2021', grape:'Gamay',
+    region:'Morgon, Beaujolais', recommendationSources:[rec], sources:[identity, rec],
+    price:{ amount:34, merchant:'Shop', source:price },
+  });
+  assert.equal(item.type, 'Red');
+  assert.equal(item.source, 'musttry');
+  assert.equal(item.recommendedBy, 'Sommelier list');
+  assert.equal(item.priceExpected, 34);
+  assert.deepEqual(item.evidence.map(e=>e.url), [rec.url, identity.url, price.url], 'the same URL is stored only once');
 });
 
 // ── "I bought this" — the explicit transition into the cellar ───────

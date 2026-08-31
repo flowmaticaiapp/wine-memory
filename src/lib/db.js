@@ -125,6 +125,20 @@ export async function deleteSamples(){
   if (error) throw error;
 }
 
+// Delete the owned bottle first, then best-effort clean its private photo.
+// This avoids leaving a live record pointing at a destroyed photo if the
+// database request fails. RLS scopes both operations to the signed-in user.
+export async function deleteWine(wine){
+  if (!wine || !wine.id) throw new Error('wine id required');
+  const photoPath = storagePath(wine.photoPath ?? wine.photo);
+  const { error } = await supabase.from('wines').delete().eq('id', wine.id);
+  if (error) throw error;
+  if (photoPath){
+    const { error: photoError } = await supabase.storage.from('bottle-photos').remove([photoPath]);
+    if (photoError) console.error('Bottle removed, but its photo could not be cleaned up', photoError);
+  }
+}
+
 // ── pairings ────────────────────────────────────────────────────────
 function rowToPairing(r){
   return { id:r.id, dish:r.dish, style:r.style, why:r.why, type:r.type,

@@ -74,7 +74,7 @@ export function displayableCandidates(response){
   const seen = new Set();
   for (const c of list){
     if (!c || typeof c !== 'object') continue;
-    if (!c.producer || !c.name || !c.vintage) continue;
+    if (!c.producer || !c.name) continue;
     if (!Array.isArray(c.sources) || !c.sources.length) continue;
     const sources = c.sources.filter(s => s && typeof s.url === 'string' && /^https:\/\//i.test(s.url));
     if (!sources.length) continue;
@@ -94,7 +94,7 @@ export function displayableCandidates(response){
     }
     // Client belt matching the server boundary: a bottle-specific reason is
     // unverified prose and never renders, even from a stale or rogue response.
-    out.push({ producer:c.producer, name:c.name, vintage:String(c.vintage),
+    out.push({ producer:c.producer, name:c.name, vintage:c.vintage ? String(c.vintage) : '',
       grape:c.grape||'', region:c.region||'', why:'',
       category:['palate','essential','branch'].includes(c.category) ? c.category : 'essential',
       sources, recommendationSources, price });

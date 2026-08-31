@@ -160,10 +160,12 @@ function EmptyFilter({ filter }){
 // ════════════════════════════════════════════════════════
 //  DETAIL
 // ════════════════════════════════════════════════════════
-function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdictVariant='expressive' }){
+function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, onDelete, verdictVariant='expressive' }){
   const [editing, setEditing] = vUS(false);
   const [draft, setDraft] = vUS(wine.note||'');
   const [photoBusy, setPhotoBusy] = vUS(false);
+  const [confirmDelete, setConfirmDelete] = vUS(false);
+  const [deleteBusy, setDeleteBusy] = vUS(false);
   const photoInputRef = vUR(null);
   vUE(()=>{ setDraft(wine.note||''); setEditing(false); },[wine.id]);
   const onPhotoFile = async (e)=>{
@@ -176,6 +178,12 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
     finally { setPhotoBusy(false); }
   };
   const triggerPhoto = ()=>{ if(!photoBusy && photoInputRef.current) photoInputRef.current.click(); };
+  const removeBottle = async ()=>{
+    if (!onDelete || deleteBusy) return;
+    setDeleteBusy(true);
+    try { await onDelete(wine); }
+    finally { setDeleteBusy(false); }
+  };
   const fam = famOf(wine.family);
   const famHue = fam ? fam.hue : FAM_NEUTRAL_HUE;
   const accent = `hsl(${famHue} 55% 46%)`;
@@ -296,11 +304,26 @@ function VisualDetail({ wine, all, onBack, onOpen, onUpdate, onAddPhoto, verdict
               : <>{wine.where && <WhereTag where={wine.where}/>}{wine.where && wine.source && <span>·</span>}{wine.source && <span>{wine.source}</span>}</>}
             {wine.price!=null && <><span>·</span><span style={{ fontFamily:'var(--mono)' }}>${Number(wine.price)%1===0?wine.price:Number(wine.price).toFixed(2)}</span></>}
           </div>
+
+          <div style={{ marginTop:30, paddingTop:20, borderTop:`1px solid ${T.line}` }}>
+            <button onClick={()=>setConfirmDelete(true)} style={{ width:'100%', padding:'13px', borderRadius:12, border:'1px solid #d9b8b8', background:'#fff', color:'#9b2f3a', fontFamily:'var(--sans)', fontSize:14, fontWeight:680, cursor:'pointer' }}>Remove from cellar</button>
+          </div>
         </div>
 
         {more.length>0 && <div style={{ marginTop:6, paddingBottom:`calc(${V_NAV+30}px + env(safe-area-inset-bottom))` }}><Shelf title="More like this" sub={fam.label} accent={fam.hue} wines={more} onOpen={onOpen}/></div>}
         {more.length===0 && <div style={{ height:`calc(${V_NAV+30}px + env(safe-area-inset-bottom))` }}/>}
       </div>
+
+      {confirmDelete && <div role="dialog" aria-modal="true" aria-label="Remove bottle from cellar?" style={{ position:'absolute', inset:0, zIndex:95, background:'rgba(23,21,15,.34)', display:'flex', alignItems:'flex-end' }} onClick={()=>{ if(!deleteBusy)setConfirmDelete(false); }}>
+        <div onClick={e=>e.stopPropagation()} style={{ width:'100%', background:'#fff', borderRadius:'20px 20px 0 0', padding:'20px 18px calc(20px + env(safe-area-inset-bottom))', boxShadow:'0 -8px 30px rgba(23,21,15,.18)' }}>
+          <div style={{ fontFamily:'var(--serif)', fontSize:21, color:T.ink }}>Remove this bottle?</div>
+          <div style={{ fontSize:13.5, color:T.ink2, lineHeight:1.5, marginTop:7 }}>This removes <b>{wine.producer ? wine.producer+' ' : ''}{wine.name} {wine.vintage}</b> from your cellar. Other bottles of the same wine will remain.</div>
+          <div style={{ display:'flex', gap:9, marginTop:18 }}>
+            <button disabled={deleteBusy} onClick={removeBottle} style={{ flex:1, padding:'14px', borderRadius:12, border:'none', background:'#9b2f3a', color:'#fff', fontFamily:'var(--sans)', fontSize:14.5, fontWeight:700, cursor:deleteBusy?'default':'pointer', opacity:deleteBusy?0.65:1 }}>{deleteBusy?'Removing…':'Remove bottle'}</button>
+            <button disabled={deleteBusy} onClick={()=>setConfirmDelete(false)} style={{ padding:'14px 18px', borderRadius:12, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:14, fontWeight:650, cursor:deleteBusy?'default':'pointer' }}>Cancel</button>
+          </div>
+        </div>
+      </div>}
     </div>
   );
 }

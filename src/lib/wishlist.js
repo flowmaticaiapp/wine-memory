@@ -55,6 +55,25 @@ export function itemToRow(i){
   };
 }
 
+// One canonical mapping for a verified Must Try bottle. Both "Save to
+// Wishlist" and the direct "I bought this" action use this shape, so the
+// purchase path cannot quietly lose identity, type, provenance, or evidence.
+export function mustTryCandidateToWishlistItem(c){
+  const recommendationSources = Array.isArray(c?.recommendationSources) ? c.recommendationSources : [];
+  const sources = Array.isArray(c?.sources) ? c.sources : [];
+  const priceSource = c?.price?.source ? [c.price.source] : [];
+  return {
+    producer:c?.producer || '', name:c?.name || '', vintage:c?.vintage || '',
+    grape:c?.grape || '', region:c?.region || '', country:c?.country || '',
+    type:inferWineType({ grape:c?.grape, name:`${c?.producer || ''} ${c?.name || ''}`, region:c?.region }),
+    why:'', recommendedBy:recommendationSources.map(s=>s.title).filter(Boolean).join(' · '),
+    priceExpected:c?.price?.amount ?? null, source:'musttry',
+    evidence:[...recommendationSources, ...sources, ...priceSource]
+      .filter(s=>s && s.url)
+      .filter((s,i,a)=>a.findIndex(x=>x.url===s.url)===i),
+  };
+}
+
 // ── Duplicate handling ──────────────────────────────────────────────
 // Same bottle = same producer + name + vintage, case-insensitively, with
 // whitespace collapsed. An empty vintage only matches another empty vintage —

@@ -41,7 +41,7 @@ const SCHEMA = {
         properties: {
           producer: { type: "string" },
           cuvee: { type: "string", description: "The wine/cuvée name as the producer states it" },
-          vintage: { type: "string", description: "The exact vintage the evidence supports, or 'NV' for a non-vintage bottling. Never a guessed or transferred vintage." },
+          vintage: { type: "string", description: "The exact vintage the evidence supports, or 'NV' for a non-vintage bottling. Use an empty string when the source recommends the bottling across releases; never guess a vintage." },
           grape: { type: "string" },
           region: { type: "string" },
           category: { type: "string", enum: ["palate", "essential", "branch"], description: "palate only with a real taste profile; essential for benchmark bottles; branch for a purposeful departure." },
@@ -75,7 +75,7 @@ async function researchCandidates(taste: string): Promise<{ evidence: Evidence[]
     `You MUST perform web search. Search narrowly and cite every factual research note. ` +
     `Formulate search terms only from grape, region, style, vintage, critic, and budget concepts. Never put a person's name, address, email, account detail, private note, or cellar contents into a search query. ` +
     `Prioritize genuine editorial recommendations from sommeliers, educators and respected publications. Publicly accessible recommendations from James Suckling, Wine Access, and Wine for Normal People are useful when directly relevant, but never force or imply their support. ` +
-    `For every promising bottle capture (1) a recommendation or list citation naming producer and cuvée, and (2) an identity citation verifying producer, cuvée and exact vintage together. One source may do both when its cited text truly supports both. ` +
+    `For every promising bottle capture (1) a recommendation or list citation naming producer and cuvée, and (2) an identity citation verifying producer and cuvée. Capture an exact vintage only when the citation states it; a release-independent bottling recommendation is valid but must carry no vintage. One source may do both when its cited text truly supports both. ` +
     `Use producer pages and appellation bodies for identity, and reputable merchants only for an optional current price. ` +
     `Note a price only when a merchant page currently lists that exact bottle and vintage at that price, and name the merchant. ` +
     `Return concise research notes, not a consumer answer. If nothing verifies, say so plainly.`;
@@ -154,7 +154,8 @@ Deno.serve(async (req) => {
     const prompt =
       `You select "Must Try" bottle candidates for a personal wine app.\n\n` +
       `The evidence registry below is the ONLY authority for bottle identity, vintages, prices, and availability. ` +
-      `Propose at most 6 bottles. Every bottle needs BOTH: sourceIds verifying producer, cuvée and vintage together, and recommendationSourceIds whose cited text names producer and cuvée and explicitly recommends the bottling. ` +
+      `Propose at most 6 bottles. Every bottle needs BOTH: sourceIds verifying producer and cuvée, and recommendationSourceIds whose cited text names producer and cuvée and explicitly recommends the bottling. ` +
+      `Use an exact vintage only when a sourceId verifies that vintage together with producer and cuvée. Otherwise set vintage to an empty string: the app will honestly label it a bottling recommendation rather than inventing a release. ` +
       `Classify each as palate, essential, or branch. Use palate only when a real taste profile is present and the bottle genuinely aligns with it; essential means a benchmark or widely recommended wine-lover bottle; branch means a purposeful expansion from the profile rather than a random pick. ` +
       `Aim for one or two strong bottles per applicable category; quality of evidence matters more than filling sections. ` +
       `Never transfer a fact, score, or price between vintages. Never invent an ID, title, URL, or source. ` +
@@ -195,7 +196,7 @@ Deno.serve(async (req) => {
     const proposed = Array.isArray(parsed.candidates)
       ? parsed.candidates.map((c: Record<string, unknown>) => (!taste && c?.category === "palate" ? { ...c, category:"essential" } : c))
       : [];
-    const candidates = verifiedCandidates(proposed, research.evidence, { requireRecommendation:true, max:6 });
+    const candidates = verifiedCandidates(proposed, research.evidence, { requireRecommendation:true, allowBottlingOnly:true, max:6 });
     return json({ candidates, researchStatus: candidates.length ? "researched" : "no_evidence" });
   } catch (e) {
     console.error("must-try error", e);

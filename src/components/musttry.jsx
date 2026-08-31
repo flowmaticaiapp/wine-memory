@@ -17,6 +17,7 @@ import * as db from '../lib/db.js';
 import { supabase } from '../lib/supabase.js';
 import { invokeAI } from '../lib/ai.js';
 import { track } from '../lib/analytics.js';
+import { PurchaseTypeSheet } from './wishlist.jsx';
 
 const { useState: mUS, useEffect: mUE, useRef: mUR, useMemo: mUM } = React;
 
@@ -32,11 +33,14 @@ function GuidanceCard({ card }){
   );
 }
 
-function CandidateCard({ c, onSave, onDismiss, savedState }){
+function CandidateCard({ c, onSave, onBuy, onDismiss, savedState }){
+  const busy = savedState==='buying';
+  const bought = savedState==='bought';
   return (
     <div style={{ border:`1px solid ${T.buy}`, background:T.buyBg, borderRadius:14, padding:'13px 15px', marginBottom:10 }}>
       <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.13em', textTransform:'uppercase', color:T.buy }}>Recommended bottle</div>
-      <div style={{ fontSize:16, fontWeight:730, color:T.ink, letterSpacing:-0.3, marginTop:5, lineHeight:1.25 }}>{c.producer} {c.name} <span style={{ color:T.ink2, fontWeight:520 }}>{c.vintage}</span></div>
+      <div style={{ fontSize:16, fontWeight:730, color:T.ink, letterSpacing:-0.3, marginTop:5, lineHeight:1.25 }}>{c.producer} {c.name} {c.vintage && <span style={{ color:T.ink2, fontWeight:520 }}>{c.vintage}</span>}</div>
+      {!c.vintage && <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.08em', textTransform:'uppercase', color:T.ink3, marginTop:4 }}>Bottling recommendation · vintage not specified</div>}
       {(c.grape || c.region) && <div style={{ fontSize:12.5, color:T.ink2, marginTop:3 }}>{[c.grape, c.region].filter(Boolean).join(' · ')}</div>}
       {c.why && <div style={{ fontSize:13.5, color:T.ink2, lineHeight:1.5, marginTop:7 }}>{c.why}</div>}
       {c.price && <div style={{ fontSize:12.5, color:T.ink2, marginTop:7 }}>Listed at <b>${c.price.amount}</b> at {c.price.merchant}</div>}
@@ -46,11 +50,13 @@ function CandidateCard({ c, onSave, onDismiss, savedState }){
           <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" style={{ fontSize:11.5, color:T.ink3 }}>{s.title}</a>
         ))}
       </div>
-      <div style={{ display:'flex', gap:9, marginTop:12 }}>
-        <button disabled={!!savedState} onClick={()=>onSave(c)} style={{ flex:1, padding:'11px', borderRadius:11, border:'none', background:savedState==='saved'?'#fff':T.ink, color:savedState==='saved'?T.buy:'#fff', fontFamily:'var(--sans)', fontSize:13.5, fontWeight:680, cursor:savedState?'default':'pointer' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:9, marginTop:12 }}>
+        <button disabled={busy || bought || savedState==='saved'} onClick={()=>onSave(c)} style={{ padding:'11px 8px', borderRadius:11, border:`1px solid ${savedState==='saved'?T.buy:T.ink}`, background:savedState==='saved'?'#fff':T.ink, color:savedState==='saved'?T.buy:'#fff', fontFamily:'var(--sans)', fontSize:13, fontWeight:680, cursor:(busy||bought||savedState==='saved')?'default':'pointer', opacity:(busy||bought)?0.55:1 }}>
           {savedState==='saved' ? 'On your Wishlist' : 'Save to Wishlist'}</button>
-        <button onClick={()=>onDismiss(c)} style={{ flexShrink:0, padding:'11px 13px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:13, fontWeight:600, cursor:'pointer' }}>Not for me</button>
+        <button disabled={busy || bought} onClick={()=>onBuy(c)} style={{ padding:'11px 8px', borderRadius:11, border:`1px solid ${T.buy}`, background:bought?T.buyBg:'#fff', color:T.buy, fontFamily:'var(--sans)', fontSize:13, fontWeight:700, cursor:(busy||bought)?'default':'pointer', opacity:busy?0.55:1 }}>
+          {busy?'Adding…':bought?'In your cellar':'I bought this'}</button>
       </div>
+      {!bought && <button disabled={busy} onClick={()=>onDismiss(c)} style={{ marginTop:8, width:'100%', padding:'8px 10px', border:'none', background:'transparent', color:T.ink3, fontFamily:'var(--sans)', fontSize:12.5, fontWeight:600, cursor:busy?'default':'pointer' }}>Not for me</button>}
     </div>
   );
 }
@@ -61,23 +67,24 @@ const SECTION_COPY = {
   branch: { title:'Worth branching out for', subtitle:'Purposeful ways to expand your experience — never random picks.' },
 };
 
-function BottleSection({ kind, candidates, onSave, onDismiss, saved }){
+function BottleSection({ kind, candidates, onSave, onBuy, onDismiss, saved }){
   if (!candidates.length) return null;
   const copy = SECTION_COPY[kind];
   return <section style={{ marginTop:20 }}>
     <div style={{ fontFamily:'var(--serif)', fontSize:21, color:T.ink }}>{copy.title}</div>
     <div style={{ fontSize:12.5, color:T.ink3, lineHeight:1.45, margin:'3px 0 10px' }}>{copy.subtitle}</div>
-    {candidates.map((c)=> <CandidateCard key={wl.bottleKey(c)} c={c} onSave={onSave} onDismiss={onDismiss} savedState={saved[wl.bottleKey(c)]}/>)}
+    {candidates.map((c)=> <CandidateCard key={wl.bottleKey(c)} c={c} onSave={onSave} onBuy={onBuy} onDismiss={onDismiss} savedState={saved[wl.bottleKey(c)]}/>)}
   </section>;
 }
 
 // research: idle | searching | done | none  (none/failed render the same quiet line)
-function MustTryScreen({ wines, userId, onClose, onToast }){
+function MustTryScreen({ wines, userId, onClose, onToast, onPurchased }){
   const guidance = mUM(()=> mustTryGuidance(wines), [wines]);
   const [candidates, setCandidates] = mUS([]);
   const [research, setResearch] = mUS('idle');
   const [saved, setSaved] = mUS({});          // candidateKey -> 'saved'
   const [dismissed, setDismissed] = mUS(null); // loaded on mount (storage is not render-safe)
+  const [pendingBuy, setPendingBuy] = mUS(null);
   const ran = mUR(false);
 
   mUE(()=>{
@@ -112,26 +119,53 @@ function MustTryScreen({ wines, userId, onClose, onToast }){
     track('musttry_not_for_me');
   };
 
+  const ensureWishlistItem = async (c)=>{
+    const key = wl.bottleKey(c);
+    let existing;
+    try { existing = await db.fetchWishlist(); }
+    catch(e){
+      if (wl.isMissingTable(e)){ onToast && onToast('Wishlist isn’t set up on this database yet'); return null; }
+      throw e;
+    }
+    const duplicate = wl.findDuplicate(existing, c);
+    if (duplicate){ setSaved(s=>({ ...s, [key]:'saved' })); return duplicate; }
+    return db.insertWishlistItem(wl.mustTryCandidateToWishlistItem(c));
+  };
+
   const save = async (c)=>{
     const key = wl.bottleKey(c);
     try {
-      let existing = [];
-      try { existing = await db.fetchWishlist(); }
-      catch(e){ if (wl.isMissingTable(e)) { onToast && onToast('Wishlist isn’t set up on this database yet'); return; } throw e; }
-      if (wl.findDuplicate(existing, c)){ setSaved(s=>({ ...s, [key]:'saved' })); onToast && onToast('Already on your Wishlist'); return; }
-      await db.insertWishlistItem({
-        producer:c.producer, name:c.name, vintage:c.vintage, grape:c.grape, region:c.region,
-        // Deterministic inference from grape/name; unknown stays unknown —
-        // the Wishlist purchase flow asks the user rather than assuming Red.
-        type: wl.inferWineType({ grape:c.grape, name:`${c.producer} ${c.name}`, region:c.region }),
-        why:'', recommendedBy:c.recommendationSources.map(s=>s.title).join(' · '), priceExpected: c.price ? c.price.amount : null,
-        source:'musttry', evidence:[...c.recommendationSources, ...c.sources, ...(c.price?.source ? [c.price.source] : [])]
-          .filter((s,i,a)=>a.findIndex(x=>x.url===s.url)===i),
-      });
+      const item = await ensureWishlistItem(c);
+      if (!item) return;
       setSaved(s=>({ ...s, [key]:'saved' }));
       track('wishlist_added', { source:'musttry' });
       onToast && onToast('Saved to your Wishlist');
     } catch(e){ console.error('save to wishlist failed', e); onToast && onToast('Could not save to Wishlist'); }
+  };
+
+  const doBuy = async (c, chosenType)=>{
+    setPendingBuy(null);
+    const key = wl.bottleKey(c);
+    setSaved(s=>({ ...s, [key]:'buying' }));
+    try {
+      const item = await ensureWishlistItem(c);
+      if (!item){ setSaved(s=>({ ...s, [key]:undefined })); return; }
+      const wine = await db.buyWishlistItem(item.id, chosenType);
+      setSaved(s=>({ ...s, [key]:'bought' }));
+      if (wine && onPurchased) onPurchased(wine);
+      track('wishlist_bought', { source:'musttry' });
+      onToast && onToast('Added to your cellar as Unopened');
+    } catch(e){
+      console.error('Must Try purchase failed', e);
+      setSaved(s=>({ ...s, [key]:undefined }));
+      onToast && onToast('Could not add to your cellar');
+    }
+  };
+
+  const buy = (c)=>{
+    const item = wl.mustTryCandidateToWishlistItem(c);
+    if (wl.needsTypeSelection(item)){ setPendingBuy(c); return; }
+    doBuy(c, null);
   };
 
   return (
@@ -158,9 +192,9 @@ function MustTryScreen({ wines, userId, onClose, onToast }){
           <span style={{ fontSize:11.5, color:T.ink4 }}>Checking credible wine lists and verifying exact bottles…</span>
         </div>}
 
-        <BottleSection kind="palate" candidates={grouped.palate} onSave={save} onDismiss={dismiss} saved={saved}/>
-        <BottleSection kind="essential" candidates={grouped.essential} onSave={save} onDismiss={dismiss} saved={saved}/>
-        <BottleSection kind="branch" candidates={grouped.branch} onSave={save} onDismiss={dismiss} saved={saved}/>
+        <BottleSection kind="palate" candidates={grouped.palate} onSave={save} onBuy={buy} onDismiss={dismiss} saved={saved}/>
+        <BottleSection kind="essential" candidates={grouped.essential} onSave={save} onBuy={buy} onDismiss={dismiss} saved={saved}/>
+        <BottleSection kind="branch" candidates={grouped.branch} onSave={save} onBuy={buy} onDismiss={dismiss} saved={saved}/>
 
         {research==='none' && <div style={{ marginTop:16, fontSize:12.5, color:T.ink4, lineHeight:1.5 }}>
           No list-backed bottles could be fully verified just now. Nothing unverified has been filled in.
@@ -177,6 +211,7 @@ function MustTryScreen({ wines, userId, onClose, onToast }){
           {guidance.cards.map((card,i)=> <GuidanceCard key={i} card={card}/>)}
         </section>
       </div>
+      <PurchaseTypeSheet item={pendingBuy ? wl.mustTryCandidateToWishlistItem(pendingBuy) : null} onChoose={(type)=>doBuy(pendingBuy, type)} onCancel={()=>setPendingBuy(null)}/>
     </div>
   );
 }

@@ -65,6 +65,20 @@ export function sourceSupportsBottle(entry, { producer, cuvee, vintage }){
     && vintageSupported(hay, vintage);
 }
 
+// A credible editorial list often recommends a benchmark BOTTLING across
+// releases rather than endorsing one vintage. That is still an actual bottle,
+// but it must not be dressed up as a vintage-specific claim. This boundary
+// verifies producer + cuvée only; callers must opt in explicitly and the UI
+// displays no vintage when it is used.
+export function sourceSupportsBottling(entry, { producer, cuvee }){
+  const hay = haystackOf(entry);
+  if (!hay) return false;
+  const p = nameTokens(producer);
+  const c = nameTokens(cuvee);
+  if (!p.length || !c.length) return false;
+  return p.every(t => hay.includes(t)) && c.every(t => hay.includes(t));
+}
+
 // Must Try is not a catalogue search. A source proving that a bottle exists
 // is necessary, but it does not prove that a sommelier, educator, publication
 // or wine-lover list actually recommends it. This second boundary requires
@@ -136,6 +150,7 @@ export function verifiedSommelierBottle(fields, sourceIds, evidence){
 
 export function verifiedCandidates(rawCandidates, evidence, options = {}){
   const requireRecommendation = options.requireRecommendation === true;
+  const allowBottlingOnly = options.allowBottlingOnly === true;
   const max = Number.isInteger(options.max) && options.max > 0 ? Math.min(options.max, 10) : 3;
   const registry = new Map((evidence || []).map((e) => [e.id, e]));
   const out = [];
@@ -145,7 +160,7 @@ export function verifiedCandidates(rawCandidates, evidence, options = {}){
     const producer = typeof c.producer === 'string' ? c.producer.trim() : '';
     const cuvee = typeof c.cuvee === 'string' ? c.cuvee.trim() : '';
     const vintage = typeof c.vintage === 'string' ? c.vintage.trim() : '';
-    if (!producer || !cuvee || !vintage) continue;   // exact identity or nothing
+    if (!producer || !cuvee || (!vintage && !allowBottlingOnly)) continue;
 
     // Cited IDs must exist in the registry AND the cited entries must
     // actually support this bottle. Only supporting sources are attached.
@@ -154,7 +169,9 @@ export function verifiedCandidates(rawCandidates, evidence, options = {}){
       : [];
     const supporting = cited
       .map((id) => registry.get(id))
-      .filter((e) => sourceSupportsBottle(e, { producer, cuvee, vintage }));
+      .filter((e) => vintage
+        ? sourceSupportsBottle(e, { producer, cuvee, vintage })
+        : sourceSupportsBottling(e, { producer, cuvee }));
     if (!supporting.length) continue;                // no real support, no candidate
     const sources = supporting.map(({ title, url }) => ({ title, url }));
 

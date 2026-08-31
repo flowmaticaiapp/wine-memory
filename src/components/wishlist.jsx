@@ -98,6 +98,22 @@ function WineToTryForm({ onSave, onCancel, duplicateOf, onSaveAnyway }){
   );
 }
 
+function PurchaseTypeSheet({ item, onChoose, onCancel }){
+  if (!item) return null;
+  return <div role="dialog" aria-modal="true" aria-label="What kind of wine is it?" style={{ position:'absolute', inset:0, zIndex:90, background:'rgba(23,21,15,.3)', display:'flex', alignItems:'flex-end' }} onClick={onCancel}>
+    <div onClick={e=>e.stopPropagation()} style={{ width:'100%', background:'#fff', borderRadius:'20px 20px 0 0', padding:'20px 18px calc(20px + env(safe-area-inset-bottom))', boxShadow:'0 -8px 30px rgba(23,21,15,.18)' }}>
+      <div style={{ fontFamily:'var(--serif)', fontSize:20, color:T.ink }}>What kind of wine is it?</div>
+      <div style={{ fontSize:13, color:T.ink2, lineHeight:1.5, marginTop:6 }}>{item.producer ? item.producer+' ' : ''}{item.name} doesn’t have a type yet — pick one so it’s filed correctly.</div>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:15 }}>
+        {['Red','White','Rosé','Sparkling','Dessert','Fortified'].map(t=>(
+          <button key={t} onClick={()=>onChoose(t)} style={{ padding:'13px', borderRadius:12, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:14.5, fontWeight:650, cursor:'pointer' }}>{t}</button>
+        ))}
+        <button onClick={onCancel} style={{ padding:'13px', borderRadius:12, border:'none', background:T.raised, color:T.ink2, fontFamily:'var(--sans)', fontSize:14, fontWeight:600, cursor:'pointer' }}>Cancel</button>
+      </div>
+    </div>
+  </div>;
+}
+
 // ── The screen ──────────────────────────────────────────────────────
 // status: loading | ready | unavailable (migration not applied) | error
 function WishlistScreen({ onClose, onPurchased, onToast }){
@@ -199,20 +215,9 @@ function WishlistScreen({ onClose, onPurchased, onToast }){
 
       {/* The type question, asked at the moment it matters: an unknown bottle
           is never silently filed as Red. */}
-      {pendingBuy && <div role="dialog" aria-label="What kind of wine is it?" style={{ position:'absolute', inset:0, zIndex:90, background:'rgba(23,21,15,.3)', display:'flex', alignItems:'flex-end' }} onClick={()=>setPendingBuy(null)}>
-        <div onClick={e=>e.stopPropagation()} style={{ width:'100%', background:'#fff', borderRadius:'20px 20px 0 0', padding:'20px 18px calc(20px + env(safe-area-inset-bottom))', boxShadow:'0 -8px 30px rgba(23,21,15,.18)' }}>
-          <div style={{ fontFamily:'var(--serif)', fontSize:20, color:T.ink }}>What kind of wine is it?</div>
-          <div style={{ fontSize:13, color:T.ink2, lineHeight:1.5, marginTop:6 }}>{pendingBuy.producer ? pendingBuy.producer+' ' : ''}{pendingBuy.name} doesn’t have a type yet — pick one so it’s filed correctly.</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:15 }}>
-            {['Red','White','Rosé','Sparkling','Dessert','Fortified'].map(t=>(
-              <button key={t} onClick={()=>doBuy(pendingBuy, t)} style={{ padding:'13px', borderRadius:12, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:14.5, fontWeight:650, cursor:'pointer' }}>{t}</button>
-            ))}
-            <button onClick={()=>setPendingBuy(null)} style={{ padding:'13px', borderRadius:12, border:'none', background:T.raised, color:T.ink2, fontFamily:'var(--sans)', fontSize:14, fontWeight:600, cursor:'pointer' }}>Cancel</button>
-          </div>
-        </div>
-      </div>}
+      <PurchaseTypeSheet item={pendingBuy} onChoose={(type)=>doBuy(pendingBuy, type)} onCancel={()=>setPendingBuy(null)}/>
     </div>
   );
 }
 
-export { WishlistScreen, NotOwnedTag };
+export { WishlistScreen, NotOwnedTag, PurchaseTypeSheet };

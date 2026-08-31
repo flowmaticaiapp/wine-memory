@@ -85,10 +85,11 @@ const GOOD = {
   price:{ amount:34, merchant:'Good Wine Shop', source:{ title:'Listing', url:'https://example.com/listing' } },
 };
 
-test('a candidate renders only with full identity and cited sources', () => {
+test('a candidate renders only with a named bottling and cited sources', () => {
   assert.equal(displayableCandidates({ candidates:[GOOD] }).length, 1);
   assert.equal(displayableCandidates({ candidates:[{ ...GOOD, sources:[] }] }).length, 0, 'no sources, no bottle');
-  assert.equal(displayableCandidates({ candidates:[{ ...GOOD, vintage:'' }] }).length, 0, 'no vintage, no bottle');
+  assert.equal(displayableCandidates({ candidates:[{ ...GOOD, vintage:'' }] })[0].vintage, '',
+    'an editorial bottling recommendation may honestly omit a vintage');
   assert.equal(displayableCandidates({ candidates:[{ ...GOOD, producer:'' }] }).length, 0);
   assert.equal(displayableCandidates({ candidates:[{ ...GOOD, sources:[{ title:'x', url:'http://insecure' }] }] }).length, 0, 'citations must be https');
   assert.equal(displayableCandidates({ candidates:[{ ...GOOD, sources:undefined }] }).length, 0, 'a malformed response neither renders nor throws');
@@ -206,6 +207,18 @@ test('identity fields are required regardless of sources', () => {
   assert.equal(verifiedCandidates([{ ...FOILLARD, cuvee:'', sourceIds:[1] }], REGISTRY).length, 0);
   assert.equal(verifiedCandidates([{ ...FOILLARD, vintage:'', sourceIds:[1] }], REGISTRY).length, 0);
   assert.equal(verifiedCandidates([{ ...FOILLARD, producer:'', sourceIds:[1] }], REGISTRY).length, 0);
+});
+
+test('Must Try may show a verified benchmark bottling without inventing a vintage', () => {
+  const proposed = { ...FOILLARD, vintage:'', sourceIds:[1], recommendationSourceIds:[6], category:'essential' };
+  assert.equal(verifiedCandidates([proposed], REGISTRY, { requireRecommendation:true }).length, 0,
+    'ordinary exact-bottle verification remains strict');
+  const [ok] = verifiedCandidates([proposed], REGISTRY,
+    { requireRecommendation:true, allowBottlingOnly:true, max:6 });
+  assert.ok(ok, 'Must Try explicitly allows a list-backed bottling recommendation');
+  assert.equal(ok.vintage, '', 'no vintage is fabricated');
+  assert.equal(ok.recommendationSources.length, 1);
+  assert.equal(ok.price, null, 'a generic bottling recommendation cannot carry a vintage-specific price');
 });
 
 test('a price passes only with bottle + amount + merchant context in its own source', () => {
