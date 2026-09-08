@@ -11,14 +11,17 @@
 //
 // Rate limit: a rolling 24h count of the user's own rows in `ai_usage` (RLS-scoped).
 // Logging/limit are best-effort — a missing table never blocks a real user.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const DAILY_LIMIT = Number(Deno.env.get("DAILY_AI_LIMIT") ?? "50");
 
 type GateResult =
-  | { ok: true; user: { id: string }; supabase: ReturnType<typeof createClient> }
+  // Type-only: `ReturnType<typeof createClient>` no longer matches the client
+  // that createClient(url, key, options) actually returns under the current
+  // supabase-js@2 types. Runtime behaviour is unchanged.
+  | { ok: true; user: { id: string }; supabase: SupabaseClient }
   | { ok: false; status: number; error: string };
 
 export async function gate(req: Request, fn: string, kind?: string): Promise<GateResult> {
