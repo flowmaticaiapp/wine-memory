@@ -47,11 +47,26 @@ test('8. samples are never searched, bottles that do not fit are excluded, ident
   assert.deepEqual(ownedMatches(PORK_TACOS, null), []);
 });
 
+test('the avoid list excludes a bottle even when its grape is otherwise a target', () => {
+  // A synthetic recommendation whose grape family overlaps its own avoid list
+  // — the avoid filter must win over the match.
+  const result = { mode:'pairing', dish:'a test dish', primary:{ grape:'Riesling', matchGrapes:['Riesling', 'Gewürztraminer'] }, others:[], avoid:['Gewürztraminer'] };
+  const ids = ownedMatches(result, [bottle({ id:'gw', grape:'Gewürztraminer', type:'White' }), bottle({ id:'rs', grape:'Riesling', type:'White' })]).map(w => w.id);
+  assert.deepEqual(ids, ['rs']);
+  // The meal-less tonight flow considers every bottle EXCEPT the avoid list.
+  const tonight = { mode:'pairing', matched:false, primary:{ grape:'Pinot Noir', matchGrapes:['Pinot Noir'] }, others:[], avoid:['Cabernet Sauvignon'] };
+  const open = ownedMatches(tonight, [bottle({ id:'cab', grape:'Cabernet Sauvignon' }), bottle({ id:'gamay', grape:'Gamay' })], { guidedTonight:true }).map(w => w.id);
+  assert.deepEqual(open, ['gamay']);
+});
+
 test('one lead and at most two alternatives, each with a reason from the bottle’s own facts', () => {
   const pick = cellarPick(PORK_TACOS, CELLAR);
   assert.ok(pick.lead, 'a lead bottle');
   assert.equal(pick.alternatives.length, 2, 'no more than two alternatives');
   assert.equal(pick.count, 3);
+  // Even with many fitting bottles the decision stays one lead + two.
+  const big = [...CELLAR, bottle({ id:'t2', producer:'Otra', name:'Tempranillo Joven', grape:'Tempranillo' }), bottle({ id:'r2', producer:'Alsace', name:'Riesling', grape:'Riesling', type:'White' })];
+  assert.equal(cellarPick(PORK_TACOS, big).alternatives.length, 2);
   assert.equal(pick.note, '');
   assert.equal(pick.lead.wine.id, 'garnacha-1', 'Buy Again + quantity leads');
   assert.match(pick.lead.reason, /Garnacha/);

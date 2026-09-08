@@ -360,7 +360,13 @@ test('unclear intent never gets a generic recommendation', () => {
 test('15. the screen applies research and enrichment only while the turn is current', () => {
   assert.match(pairingScreenSource, /const guard = turnGuard\(\)/);
   assert.match(pairingScreenSource, /const token = guard\.next\(\)/);
-  assert.match(pairingScreenSource, /if \(!guard\.isCurrent\(token\) \|\| !mounted\.current\) return;/, 'a research result for a superseded question never reaches the screen');
+  // Both the success path and the failure path of a research round-trip
+  // check the token before touching the screen.
+  const guardChecks = pairingScreenSource.match(/if \(!guard\.isCurrent\(token\) \|\| !mounted\.current\) return;/g) || [];
+  assert.ok(guardChecks.length >= 2, `expected the token check on success and failure paths, found ${guardChecks.length}`);
+  const researchBody = pairingScreenSource.slice(pairingScreenSource.indexOf('const runResearch'), pairingScreenSource.indexOf('const run = async'));
+  assert.match(researchBody, /await withTimeout\([\s\S]*?clearTimeout\(slowTimer\);\s*if \(!guard\.isCurrent\(token\)/, 'the check happens immediately after the response arrives');
+  assert.match(researchBody, /catch\(e\)\{[\s\S]*?if \(!guard\.isCurrent\(token\)/, 'and immediately on failure');
   assert.match(pairingScreenSource, /isCurrentRun: guard\.isCurrent\(token\)/, 'enrichment goes through the same disposition rule');
   assert.match(pairingScreenSource, /const cancel = \(\)=>\{\s*guard\.invalidate\(\)/, 'Cancel makes the in-flight response stale');
   assert.match(pairingScreenSource, /const startNew = \(\)=>\{\s*guard\.invalidate\(\)/, 'New question makes the in-flight response stale');

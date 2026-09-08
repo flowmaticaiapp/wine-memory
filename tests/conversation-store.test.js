@@ -65,9 +65,12 @@ test('14. sign-out clears the conversation for that user', () => {
   clearConversation('user-a', store);
   assert.equal(readConversation('user-a', store), null);
   assert.equal(store._map.size, 0);
-  assert.match(authSource, /clearConversation\(id\)/, 'the sign-out path calls it');
-  assert.match(authSource, /clearLastAnswer\(id\)/, 'alongside the older answer cache');
-  assert.match(authSource, /clearConversation\(id\);[\s\S]*?await supabase\.auth\.signOut\(\)/, 'before the session ends');
+  // The call must be live code on the sign-out path (not a comment), and
+  // happen before the session ends.
+  const signOutBody = authSource.slice(authSource.indexOf('export async function signOut'));
+  assert.match(signOutBody, /^\s*clearConversation\(id\);/m, 'the sign-out path calls it');
+  assert.match(signOutBody, /^\s*clearLastAnswer\(id\);/m, 'alongside the older answer cache');
+  assert.match(signOutBody, /^\s*clearConversation\(id\);[\s\S]*?await supabase\.auth\.signOut\(\)/m, 'before the session ends');
 });
 
 // ── 15. A late response cannot overwrite a newer answer ─────────────
