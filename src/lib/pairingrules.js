@@ -171,4 +171,81 @@ function pairingHeadline(result){
   return result && result.dish ? 'For ' + result.dish : '';
 }
 
-export { DISH_RULES, DEFAULT_RULE, priceLimit, isPairingQuery, hasSpecificFoodContext, needsTacoGuidance, heuristicPairing, pairingHeadline };
+// ── Colour swaps ────────────────────────────────────────────────────
+// Reviewed answers to "white instead" / "give me a red" for dishes whose own
+// alternatives do not already contain that colour. Same standard as the rules
+// above: a grape or style, a region-level best bet, practical shelf clues, no
+// bottle, no price, no score. Where a dish has no honest entry for a colour,
+// the conversation engine says so and offers to check public sources rather
+// than inventing one. Keyed by rule id, then colour.
+const CHILLED_RED = {
+  grape:'Gamay', deeperTitle:'Cru Beaujolais or a chilled Gamay',
+  deeper:'Beaujolais Gamay is juicy and low in tannin, so it flatters the food without fighting chile, lime or fresh toppings.',
+  lookFor:["Beaujolais-Villages, or a cru such as Fleurie or Brouilly", "Low tannin and moderate alcohol — serve slightly chilled", "Garnacha or Frappato work the same way"],
+  matchGrapes:['Gamay','Grenache','Garnacha','Frappato'],
+};
+const RICH_WHITE = {
+  grape:'Chardonnay', deeperTitle:'Oaked Chardonnay — white Burgundy or California',
+  deeper:'A barrel-aged Chardonnay has the weight and savoury depth that meat and umami-rich sauces need from a white.',
+  lookFor:["‘Barrel fermented’ or ‘oaked’ on the label", "Meursault, Pouilly-Fuissé, or a Sonoma and Santa Barbara Chardonnay", "Avoid lean, steely styles — they vanish beside red meat"],
+  matchGrapes:['Chardonnay'],
+};
+const FULL_ROSE = {
+  grape:'Dry Rosé', deeperTitle:'A fuller dry rosé — Tavel or Bandol',
+  deeper:'Southern French rosé with real body and savoury fruit bridges grilled or spiced food without firm tannin.',
+  lookFor:["Tavel or Bandol for the fuller style", "Deeper colour usually means more body", "Dry, with moderate alcohol"],
+  matchGrapes:['Grenache','Garnacha','Cinsault','Mourvèdre'],
+};
+const DRY_SPARKLING = {
+  grape:'Sparkling Brut', deeperTitle:'Champagne, Cava or Crémant labelled Brut',
+  deeper:'Bubbles and high acidity refresh the palate between rich, salty or spicy bites, which is why dry sparkling wine is so flexible at the table.',
+  lookFor:["‘Brut’ for dry; avoid ‘Doux’ or ‘Demi-Sec’ unless the dish is sweet", "Crémant or Cava for value; Champagne for more depth", "Rosé sparkling adds red fruit for spiced or grilled dishes"],
+  matchGrapes:['Champagne','Sparkling','Cava','Crémant'],
+};
+const COLOR_SWAPS = {
+  'pork-tacos':       { red:{ ...CHILLED_RED, why:'If you want a red with pork tacos, choose one with low tannin, bright acidity and fresh red fruit: Gamay served slightly chilled keeps chile, lime and salsa fresh where a tannic red would turn harsh.' } },
+  'mixed-tacos':      { red:{ ...CHILLED_RED, why:'Across a mixed taco spread a red needs to stay light and low in tannin: Gamay served cool refreshes the table where a firm red would clash with chile and lime.' } },
+  'chicken-tacos':    { red:{ ...CHILLED_RED, why:'A chilled, low-tannin Gamay is the red route for chicken tacos: enough fruit for salsa and chile, none of the tannin that fights lime and cilantro.' } },
+  'fish-tacos':       { red:{ ...CHILLED_RED, why:'Red wine and fish tacos is a stretch, so keep it as light as reds go: chilled Gamay or Frappato has the acidity for lime and salsa without the tannin that turns metallic against fish.' } },
+  'vegetable-tacos':  { red:{ ...CHILLED_RED, why:'Vegetable tacos want a red that lifts rather than buries: chilled Gamay brings acidity for salsa and lime with soft tannin that respects beans and roasted vegetables.' } },
+  'spicy-heat':       { red:{ ...CHILLED_RED, why:'Heat punishes alcohol and tannin, so the red route is a light, low-tannin, moderate-alcohol red served cool — Gamay or Frappato — rather than anything big.' },
+                        sparkling:{ ...DRY_SPARKLING, why:'Dry bubbles refresh the palate between spicy bites, and a rosé sparkling adds a little fruit for the chile.' } },
+  'seafood':          { red:{ ...CHILLED_RED, why:'Tannic reds and delicate seafood clash, so the red route is the lightest, lowest-tannin red served cool — best with richer fish such as salmon or tuna rather than oysters.', matchGrapes:['Gamay','Pinot Noir','Frappato'] },
+                        rose:{ ...FULL_ROSE, why:'Dry rosé keeps the freshness seafood needs while adding a little more fruit than a lean white.' },
+                        sparkling:{ ...DRY_SPARKLING, why:'Brut sparkling wine is the classic partner for oysters and shellfish: bracing acidity and bubbles scrub the palate clean.' } },
+  'steak-mushroom':   { white:{ ...RICH_WHITE, why:'A white with steak is unusual, but a rich, oaked Chardonnay has the weight for beef and the savoury depth for mushroom sauce.' },
+                        rose:{ ...FULL_ROSE, why:'A fuller Tavel or Bandol rosé has enough body for steak while staying fresh against the mushroom sauce.' } },
+  'grilled-red-meat': { white:{ ...RICH_WHITE, why:'Grilled red meat wants weight, so the white route is a rich, oaked Chardonnay rather than anything lean.' },
+                        rose:{ ...FULL_ROSE, why:'A structured southern French rosé handles char and fat far better than a pale, delicate one.' } },
+  'steak-chimichurri':{ white:{ grape:'Sauvignon Blanc', why:'Chimichurri is green and garlicky, so the white route follows the sauce: a herbal Sauvignon Blanc echoes the herbs while its acidity cuts the beef’s richness.', deeperTitle:'Herbal Sauvignon Blanc — Loire or Chile', deeper:'Sancerre-style or Chilean Sauvignon Blanc brings green, herbal notes and bright acidity that mirror the sauce.', lookFor:["Sancerre, Touraine or Chilean Sauvignon Blanc", "Unoaked — oak fights the herbs", "Serve well chilled"], matchGrapes:['Sauvignon Blanc'] } },
+  'beef-tacos':       { white:{ grape:'Verdejo', why:'For beef tacos as a white, follow the toppings rather than the meat: crisp Verdejo lifts lime, salsa and onion while staying fruity enough for charred beef.', deeperTitle:'Spanish Verdejo or Sauvignon Blanc', deeper:'A crisp, unoaked white keeps the whole taco bright.', lookFor:["Rueda on the label for Spanish Verdejo", "Unoaked Sauvignon Blanc for citrus and herbs", "Moderate alcohol if the salsa is hot"], matchGrapes:['Verdejo','Sauvignon Blanc'] } },
+  'mushroom-umami':   { white:{ ...RICH_WHITE, why:'Mushrooms and umami suit a savoury, textured white: oaked Chardonnay brings the depth that earthy dishes ask for.' } },
+  'tomato-red-sauce': { white:{ grape:'Vermentino', why:'Tomato’s acidity needs a white with matching acidity: Vermentino or Verdicchio stays bright against the sauce and herbs.', deeperTitle:'Vermentino or Verdicchio', deeper:'Coastal Italian whites bring citrus, herbs and a saline edge that suit tomato and herbs.', lookFor:["Vermentino di Sardegna or Ligurian Vermentino", "Verdicchio dei Castelli di Jesi", "High acidity is the requirement — skip rich, oaky whites"], matchGrapes:['Vermentino','Verdicchio'] },
+                        rose:{ ...FULL_ROSE, why:'Dry rosé has the acidity tomato needs plus enough fruit for cheese and cured meats.' } },
+  'cheese-charcuterie':{ white:{ grape:'Chenin Blanc', why:'Salty cheese and cured meat want acidity and a little texture: dry Chenin Blanc or Riesling cuts the fat while staying refreshing.', deeperTitle:'Dry Chenin Blanc — Loire — or dry Riesling', deeper:'Loire Chenin and dry German or Alsace Riesling bring high acidity and orchard fruit that flatter a mixed board.', lookFor:["Vouvray Sec, Savennières or Montlouis for Chenin", "‘Trocken’ or Alsace for dry Riesling", "Avoid heavy oak — it clashes with salty cheese"], matchGrapes:['Chenin Blanc','Riesling'] },
+                        sparkling:{ ...DRY_SPARKLING, why:'Salt and fat love bubbles: a Brut sparkling wine refreshes between cheeses and cured meats.' } },
+  'poultry':          { sparkling:{ ...DRY_SPARKLING, why:'Roast chicken is one of sparkling wine’s easiest partners: bubbles refresh the roasted skin without overpowering the bird.' } },
+  'general-versatile':{ sparkling:{ ...DRY_SPARKLING, why:'When the table is mixed, dry sparkling wine is the most flexible bottle you can open.' } },
+};
+
+// Region-level detail for styles the conversation engine may PROMOTE from an
+// alternative to the lead (a colour swap, or heat moving the answer to the
+// off-dry option). Dish-agnostic on purpose, so a promoted card is never
+// thinner than the original and never borrows another dish's reasoning.
+const STYLE_DETAILS = {
+  'gamay': CHILLED_RED,
+  'chardonnay': RICH_WHITE,
+  'dry rosé': FULL_ROSE,
+  'sparkling brut': DRY_SPARKLING,
+  'champagne': DRY_SPARKLING,
+  'sparkling brut rosé': { ...DRY_SPARKLING, grape:'Sparkling Brut Rosé', deeperTitle:'Brut Rosé — Crémant, Cava or Champagne rosé', matchGrapes:['Champagne','Sparkling','Cava','Crémant','Grenache','Pinot Noir'] },
+  'off-dry riesling': { grape:'Off-dry Riesling', deeperTitle:'Off-dry Mosel Riesling — Kabinett or Feinherb', deeper:'German Mosel Riesling balances gentle sweetness with bright acidity, which is exactly what chile heat and rich, spiced food ask for.', lookFor:["German Riesling marked Kabinett or Feinherb — gently off-dry", "Alcohol at or below 11% — high alcohol amplifies chilli heat", "Aromatic whites — Gewürztraminer, Grüner Veltliner — work the same way"], matchGrapes:['Riesling','Chenin','Gewürztraminer'] },
+};
+
+// Heat changes the pairing logic, not just the label. Reviewed principle,
+// applied when a follow-up adds real chile heat to a dish.
+const HEAT_PRINCIPLE = 'Chile heat amplifies alcohol and tannin, so a touch of sweetness, lower alcohol and soft tannin keep the pairing cool.';
+const HEAT_AVOID_NOTE = 'With very hot salsa or spice, high alcohol, heavy oak and firm tannin make the heat feel hotter.';
+const HEAT_AVOID = ['Cabernet Sauvignon','Nebbiolo','Malbec','Zinfandel'];
+
+export { DISH_RULES, DEFAULT_RULE, COLOR_SWAPS, STYLE_DETAILS, HEAT_PRINCIPLE, HEAT_AVOID_NOTE, HEAT_AVOID, priceLimit, isPairingQuery, hasSpecificFoodContext, needsTacoGuidance, heuristicPairing, pairingHeadline };

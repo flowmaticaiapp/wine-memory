@@ -83,9 +83,30 @@ function anthropicHeaders(): Record<string, string> {
   };
 }
 
-async function researchQuestion(query: string): Promise<{ evidence: Evidence[]; status: "researched" | "no_evidence" | "unavailable" }> {
+// Conversation fields are UNTRUSTED client input: bounded in length, control
+// characters stripped, roles whitelisted. The client builds `context` from
+// dish and constraint concepts only; even so, nothing here is ever placed
+// into a search query except by the model under the privacy rule below.
+const clean = (v: unknown, max: number): string =>
+  typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, max) : "";
+type Turn = { role: "user" | "sommelier"; text: string };
+function cleanHistory(v: unknown): Turn[] {
+  if (!Array.isArray(v)) return [];
+  const out: Turn[] = [];
+  for (const t of v.slice(-6)) {
+    if (!t || typeof t !== "object") continue;
+    const role = (t as { role?: unknown }).role;
+    const text = clean((t as { text?: unknown }).text, 300);
+    if ((role === "user" || role === "sommelier") && text) out.push({ role, text });
+  }
+  return out;
+}
+const INTENTS = new Set(["pairing", "cellar", "evaluate", "shop", "explain", "compare", "discover", "followup"]);
+
+async function researchQuestion(query: string, context = ""): Promise<{ evidence: Evidence[]; status: "researched" | "no_evidence" | "unavailable" }> {
   const prompt =
     `Research this wine question before it is answered: "${query}"\n\n` +
+    (context ? `Conversation context (the meal, the current suggestion, and the user's constraints — concepts only): ${context}\n\n` : "") +
     `You MUST perform web search. Search narrowly and cite every factual research note. ` +
     `Formulate search terms only from the wine, food, region, vintage, critic, budget, or style concepts needed to answer. Never put a person's name, street address, email, account detail, private note, or cellar contents into a search query. ` +
     `When relevant, your FIRST search must look for the question on JamesSuckling.com, WineAccess.com, and WineForNormalPeople.com because the user values those voices. If that search is not useful, broaden. ` +
@@ -154,7 +175,12 @@ Deno.serve(async (req) => {
     if (query.length < 2) return json({ kind: "answer", text: "" });
     const ownedGrapes = typeof body.ownedGrapes === "string" && body.ownedGrapes ? body.ownedGrapes : "none yet";
     const owned = Array.isArray(body.owned) ? body.owned.slice(0, 80) : [];
-    const research = await researchQuestion(query);
+    // Optional conversation state (this is a stateless function; the client
+    // holds the thread and sends only what this question needs).
+    const context = clean(body.context, 600);
+    const history = cleanHistory(body.history);
+    const intent = typeof body.intent === "string" && INTENTS.has(body.intent) ? body.intent : "";
+    const research = await researchQuestion(query, context);
     const evidenceText = research.evidence.length
       ? research.evidence.map(e => `[S${e.id}] ${e.title}\nURL: ${e.url}\nEvidence: ${e.citedText || "The cited page supported the research note."}`).join("\n\n")
       : "No usable cited public-web evidence was retrieved.";
@@ -192,7 +218,14 @@ Deno.serve(async (req) => {
       `OR up to 4 short lines each starting with "- " for lists/comparisons. No preamble, no markdown headers. Leave dish/primary/others empty.\n\n` +
       `The user owns these grapes/styles: ${ownedGrapes}. Full collection: ${JSON.stringify(owned)}. ` +
       `Reference their collection when it's genuinely relevant (e.g. why they like a grape, or what to buy that fits their taste).\n` +
-      `GROUNDING: for a pairing "why"/"deeper", reference only ingredients, sauces, or flavours present in or reasonably inferred from the question — never introduce a protein or dish the user did not mention.\n\n` +
+      `GROUNDING: for a pairing "why"/"deeper", reference only ingredients, sauces, or flavours present in or reasonably inferred from the question or the conversation context — never introduce a protein or dish the user did not mention.\n\n` +
+      (context || history.length
+        ? `CONVERSATION SO FAR. This question continues a conversation. The user must never have to repeat the meal, bottle, budget or preferences, so answer in light of this context.\n` +
+          (context ? `Context: ${context}\n` : "") +
+          (history.length ? history.map((t) => `${t.role === "user" ? "User" : "Sommelier"}: ${t.text}`).join("\n") + "\n" : "") +
+          `If the question challenges or asks WHY about the previous answer, explain the reasoning concisely as kind="answer" (factors weighed, and what the evidence does or does not support) — do not restate the whole recommendation. If it asks for a different colour, budget or dish detail, give the revised recommendation.\n\n`
+        : "") +
+      (intent ? `The app classified this question as "${intent}". Follow that unless the question clearly says otherwise (explain/compare/evaluate/shop/discover → kind="answer"; pairing/cellar → kind="pairing").\n\n` : "") +
       `QUESTION: "${query}"`;
 
     const callClaude = (withEffort: boolean): Promise<Response> => {

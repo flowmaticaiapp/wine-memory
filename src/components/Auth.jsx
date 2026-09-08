@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { T } from '../lib/data.js';
 import { supabase, supabaseConfigured } from '../lib/supabase.js';
 import { clearLastAnswer } from '../lib/lastanswer.js';
+import { clearConversation } from '../lib/conversation-store.js';
 
 const wrap = { minHeight:'100vh', background:T.canvas, display:'flex', alignItems:'center', justifyContent:'center', padding:24, boxSizing:'border-box' };
 const card = { width:'100%', maxWidth:360, background:T.bg, borderRadius:20, padding:'40px 28px', boxShadow:'0 10px 40px rgba(22,20,15,0.10), 0 1px 2px rgba(22,20,15,0.05)' };
@@ -130,13 +131,16 @@ export function AuthScreen(){
   );
 }
 
-// On sign-out, the cached last pairing answer is cleared so nothing from this
-// account lingers for the next person who signs in on the same device.
+// On sign-out, the cached last pairing answer AND the sommelier conversation
+// are cleared so nothing from this account lingers for the next person who
+// signs in on the same device.
 export async function signOut(){
   if (!supabase) return;
   try {
     const { data } = await supabase.auth.getUser();
-    clearLastAnswer(data && data.user ? data.user.id : null);
+    const id = data && data.user ? data.user.id : null;
+    clearLastAnswer(id);
+    clearConversation(id);
   } catch { /* clearing the cache must never block sign-out */ }
   await supabase.auth.signOut();
 }
