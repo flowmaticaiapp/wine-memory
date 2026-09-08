@@ -99,7 +99,8 @@ test('a fast response passes through the timeout untouched', async () => {
 test('research-first explainers get time for search plus answer, without an unlimited spinner', () => {
   assert.ok(RESEARCH_FIRST_TIMEOUT_MS > RESEARCH_TIMEOUT_MS,
     'two sequential research steps need more time than background enrichment');
-  assert.ok(RESEARCH_FIRST_TIMEOUT_MS <= 60_000, 'the longer ceiling is still bounded');
+  assert.ok(RESEARCH_FIRST_TIMEOUT_MS <= 120_000, 'the longer ceiling is still bounded');
+  assert.ok(RESEARCH_FIRST_TIMEOUT_MS >= 75_000, 'and covers a healthy research round-trip measured in production');
 });
 
 test('sommelier failures distinguish a usage block, a research timeout, and an outage', () => {

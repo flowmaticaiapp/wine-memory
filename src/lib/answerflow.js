@@ -57,7 +57,10 @@ export const RESEARCH_TIMEOUT_MS = 20_000;
 // Research-first explainers perform web research and then a structured answer
 // call. They get a longer ceiling than background pairing enrichment; otherwise
 // a healthy request can be discarded while its second step is still running.
-export const RESEARCH_FIRST_TIMEOUT_MS = 45_000;
+// Measured in production (Sep 2026): a healthy explainer round-trip takes
+// roughly 60–75 seconds end to end, so the ceiling sits above that. The
+// screen shows its slow state after 8 seconds and offers Cancel throughout.
+export const RESEARCH_FIRST_TIMEOUT_MS = 90_000;
 
 // Reject with a `.timeout` flag after `ms`. The underlying request is not
 // aborted — its eventual result is simply ignored by the caller's run token.

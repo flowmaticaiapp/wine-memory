@@ -36,7 +36,7 @@ const CELLAR = [0,1,2,3,4,5].map(i=>ratedWine(i));
 
 test('Must Try allows time for both web research and bottle verification', () => {
   assert.ok(MUST_TRY_RESEARCH_TIMEOUT_MS > RESEARCH_TIMEOUT_MS);
-  assert.ok(MUST_TRY_RESEARCH_TIMEOUT_MS <= 60_000, 'the longer request remains bounded');
+  assert.ok(MUST_TRY_RESEARCH_TIMEOUT_MS <= 120_000, 'the longer request remains bounded');
 });
 
 test('Find a bottle stays in the dedicated Must Try verification flow', () => {
