@@ -820,8 +820,9 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
               : <div style={{ padding:'14px', border:`1px dashed ${T.line2}`, borderRadius:12, background:T.canvas, fontSize:13.5, color:T.ink2, lineHeight:1.5 }}>Nothing here fits this one — the shelf guidance above is what to buy.</div>}
           </div>}
 
-          {/* Follow up without starting over: taps and typed challenges take the same path */}
-          {!data.guidedTonight && <FollowUpBar data={data} onAsk={(v)=>run(v)} onFocusInput={focusInput}/>}
+          {/* Follow up without starting over: taps and typed challenges take the
+              same path — on the guided tonight answer too. */}
+          <FollowUpBar data={data} onAsk={(v)=>run(v)} onFocusInput={focusInput}/>
 
           {data.guidedTonight && <button onClick={()=>{ setGuideMeal(null); setPending({ id:'tonight-meal', original:asked, intent:'cellar' }); setPhase('guide-meal'); }} style={{ width:'100%', marginTop:18, padding:'12px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, cursor:'pointer' }}>Change the meal or mood</button>}
 

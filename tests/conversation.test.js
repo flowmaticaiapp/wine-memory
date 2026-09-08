@@ -608,3 +608,23 @@ test('guided and seeded questions are new topics, never follow-ups', () => {
   assert.equal(seeded.question.id, 'tonight-meal');
   assert.match(pairingScreenSource, /run\(initialQuery, \{ newTopic:true \}\)/);
 });
+
+test('the guided tonight answer offers follow-up actions, and "why this?" explains the bottle decision', () => {
+  // The screen renders the follow-up bar on every pairing answer, including the guided tonight one.
+  const pairingBlock = pairingScreenSource.slice(pairingScreenSource.indexOf("phase==='pairing' && data"));
+  assert.match(pairingBlock, /^\s*<FollowUpBar data=\{data\} onAsk=\{\(v\)=>run\(v\)\} onFocusInput=\{focusInput\}\/>/m, 'the bar is unconditional on the pairing answer');
+  assert.doesNotMatch(pairingBlock, /!data\.guidedTonight && <FollowUpBar/);
+  // Actions on a tonight answer omit the redundant cellar check.
+  const tonight = { mode:'pairing', guidedTonight:true, tonightReason:'It fits steak and gives you bold tonight.', primary:{ grape:'Malbec' }, others:[] };
+  const labels = followUpActions(tonight).map(a => a.label);
+  assert.ok(labels.includes('Why this?') && labels.includes('Show sources'));
+  assert.ok(!labels.includes('Check my cellar'));
+  // "Why this?" explains the decision that was actually made.
+  let conv = emptyConversation();
+  conv = appendUserTurn(conv, 'What should I open tonight with steak? I want bold.', 'cellar');
+  conv = withContext(conv, { dishQuery:'What should I open tonight with steak? I want bold.', dishLabel:'grilled red meat' });
+  conv = appendAnswer(conv, { asked:'What should I open tonight with steak? I want bold.', summary:'Malbec', data: tonight, intent:'cellar', mode:'pairing' });
+  const why = planTurn('Why this?', conv);
+  assert.equal(why.kind, 'explanation');
+  assert.equal(why.answer.text, 'It fits steak and gives you bold tonight.');
+});

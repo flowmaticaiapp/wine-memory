@@ -485,7 +485,10 @@ export function explainFollowUp(fu, conv){
   }
 
   if (fu.kind === 'why'){
-    return { mode:'explanation', kind:'why', text: whyLead(p, dish), sources: sourcesFor(pairing), basis: basisOf(pairing),
+    // A guided tonight answer led with an owned bottle: explain that decision,
+    // not the generic style behind it.
+    const text = pairing.guidedTonight && pairing.tonightReason ? pairing.tonightReason : whyLead(p, dish);
+    return { mode:'explanation', kind:'why', text, sources: sourcesFor(pairing), basis: basisOf(pairing),
       factors: factorsFor(conv.context, pairing) };
   }
 
@@ -768,7 +771,7 @@ export function followUpActions(data){
     if (color !== 'white') actions.push(['White instead', 'white instead']);
     if (color !== 'red') actions.push(['Red instead', 'red instead']);
     actions.push(['Something cheaper', 'something cheaper']);
-    if (data.mode !== 'cellar') actions.push(['Check my cellar', 'do I already own something?']);
+    if (data.mode !== 'cellar' && !pairing.guidedTonight) actions.push(['Check my cellar', 'do I already own something?']);
     actions.push(['Show sources', 'what source supports that?']);
     return actions.map(([label, value]) => ({ label, value }));
   }
