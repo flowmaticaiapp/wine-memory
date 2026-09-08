@@ -245,6 +245,22 @@ function pairingOf(data){
   return null;
 }
 
+// The pairing a conversation is ABOUT: the current answer's, or — when the
+// current answer is an explanation ("why not Syrah?") — the most recent
+// pairing answer in the thread. A why-question must not make the sommelier
+// forget the meal for the follow-up after it.
+export function lastPairing(conv){
+  if (!conv) return null;
+  const now = pairingOf(conv.current?.data);
+  if (now) return now;
+  const turns = conv.turns || [];
+  for (let i = turns.length - 1; i >= 0; i--){
+    const p = pairingOf(turns[i].data);
+    if (p) return p;
+  }
+  return null;
+}
+
 // Locate a grape the user mentioned within the current answer. Returns
 // { where:'primary'|'other'|'avoid', item } or null.
 export function locateGrape(pairing, text){
@@ -266,7 +282,7 @@ export function detectFollowUp(q, conv){
   const raw = s(q);
   const t = norm(raw);
   if (!t || !conv || !conv.current) return null;
-  const pairing = pairingOf(conv.current.data);
+  const pairing = lastPairing(conv);
   const newDish = hasSpecificFoodContext(t);
 
   // Explicit new topics always win over follow-up heuristics.
@@ -464,13 +480,14 @@ function whyLead(p, dish){
 export function explainFollowUp(fu, conv){
   const current = conv?.current;
   const data = current?.data;
-  const pairing = pairingOf(data);
+  const pairing = lastPairing(conv);
   const dish = pairing?.dish || conv?.context?.dishLabel || '';
   const p = pairing?.primary;
 
   if (fu.kind === 'sources'){
-    const sources = sourcesFor(data && data.mode === 'cellar' ? data.pairing : data);
-    const basis = basisOf(data && data.mode === 'cellar' ? data.pairing : data);
+    const subject = data && (data.mode === 'answer' || data.mode === 'explanation') && (data.sources || []).length === 0 && pairing ? pairing : (data && data.mode === 'cellar' ? data.pairing : data);
+    const sources = sourcesFor(subject);
+    const basis = basisOf(subject);
     const text = sources.length ? BASIS_TEXT.researched : (BASIS_TEXT[basis] || BASIS_TEXT.rule);
     return { mode:'explanation', kind:'sources', text, sources, basis, factors: factorsFor(conv.context, pairing),
       offerResearch: !sources.length && basis !== 'no_evidence' };
@@ -500,7 +517,8 @@ export function explainFollowUp(fu, conv){
     if (found.where === 'primary') text = `${p.grape} is the lead here. ${p.why}`;
     else if (found.where === 'other') text = `${whyLead(p, dish)} ${found.item.grape} is the “${lc(found.item.direction || 'alternative')}” route: ${found.item.why}`;
     else text = `${found.item.grape} is on the avoid list for ${dish || 'this dish'}. ${pairing.avoidNote || `It does not fit the dish’s balance.`} That is why ${p.grape} leads: ${lc(p.why)}`;
-    if (fu.kind === 'why-instead' && fu.chosen && !grapeNamed(fu.chosen, [p.grape])){
+    const pronoun = /^(?:that|this|it|the (?:lead|pick|first|one|recommendation)|yours?|the one you (?:picked|chose|suggested))$/i;
+    if (fu.kind === 'why-instead' && fu.chosen && !pronoun.test(fu.chosen.trim()) && !grapeNamed(fu.chosen, [p.grape])){
       text = `The current lead is ${p.grape}, not ${fu.chosen}. ${text}`;
     }
     return { mode:'explanation', kind:fu.kind, text, sources: sourcesFor(pairing), basis: basisOf(pairing), factors: factorsFor(conv.context, pairing) };
@@ -655,7 +673,7 @@ export function planTurn(query, conv, options = {}){
   const skipFollowUp = options.newTopic || options.guidedTaco || options.guidedTonight || (options.clarified && !options.clarified.followUp);
   const fu = skipFollowUp ? null : detectFollowUp(t, conv);
   if (fu){
-    const pairing = pairingOf(conv.current.data);
+    const pairing = lastPairing(conv);
     const base = conv.context || {};
     const currentIntent = conv.current.intent || (pairing ? 'pairing' : 'explain');
 

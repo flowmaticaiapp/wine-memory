@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import {
   planTurn, composeClarified, detectFollowUp, classifyIntent, extractContext, explainFollowUp,
   applyHeat, colorSwap, sourcesFor, factorsFor, researchQuestion, researchContext, historyFor,
-  followUpActions, summaryOf, locateGrape, styleDetailsFor, TACO_FILLINGS, MEAL_CHOICES,
+  followUpActions, summaryOf, locateGrape, styleDetailsFor, lastPairing, TACO_FILLINGS, MEAL_CHOICES,
 } from '../src/lib/conversation.js';
 import { emptyConversation, appendUserTurn, appendAnswer, withContext } from '../src/lib/conversation-store.js';
 import { instantPairing } from '../src/lib/answerflow.js';
@@ -632,4 +632,28 @@ test('the guided tonight answer offers follow-up actions, and "why this?" explai
   const why = planTurn('Why this?', conv);
   assert.equal(why.kind, 'explanation');
   assert.equal(why.answer.text, 'It fits steak and gives you bold tonight.');
+});
+
+test('a why-question does not make the sommelier forget the meal: the next budget or colour follow-up is still instant', () => {
+  const { conv } = porkTacoConversation();
+  const why = planTurn('Why that instead of Riesling?', conv);
+  assert.equal(why.kind, 'explanation');
+  assert.doesNotMatch(why.answer.text, /not that/i, '"that" refers to the lead, it is not a grape');
+  let next = appendUserTurn(conv, 'Why that instead of Riesling?', 'followup');
+  next = appendAnswer(next, { asked:'Why that instead of Riesling?', summary:'x', data: why.answer, intent:'followup', mode:'explanation' });
+  const budget = planTurn('something under $25', next);
+  assert.equal(budget.kind, 'instant', 'the pairing behind the explanation is still the subject');
+  assert.equal(budget.result.ruleId, 'pork-tacos');
+  assert.equal(budget.result.limit, 25);
+  const red = planTurn('red instead', next);
+  assert.equal(red.kind, 'instant');
+  assert.equal(red.result.primary.grape, 'Gamay');
+  const cellar = planTurn('do I already own something?', next);
+  assert.equal(cellar.kind, 'cellar');
+  assert.equal(cellar.pairing.ruleId, 'pork-tacos');
+  const sources = planTurn('what source supports that?', next);
+  assert.equal(sources.kind, 'explanation');
+  assert.match(sources.answer.text, /reviewed pairing guidance/);
+  assert.equal(lastPairing(next).ruleId, 'pork-tacos');
+  assert.equal(lastPairing(emptyConversation()), null);
 });

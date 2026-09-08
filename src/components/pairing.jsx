@@ -20,7 +20,7 @@ import { tonightReason, alternativeDirection } from '../lib/tonight.js';
 import { relevantBuyAgainGrape } from '../lib/pairing-insight.js';
 import { readLastAnswer, writeLastAnswer } from '../lib/lastanswer.js';
 import { withTimeout, instantPairing, reconcileEnrichment, enrichmentDisposition, pairingBasis, RESEARCH_FIRST_TIMEOUT_MS, sommelierFailureMessage } from '../lib/answerflow.js';
-import { planTurn, composeClarified, followUpActions, summaryOf, researchQuestion, researchContext, historyFor, pairingOf, TACO_FILLINGS } from '../lib/conversation.js';
+import { planTurn, composeClarified, followUpActions, summaryOf, researchQuestion, researchContext, historyFor, lastPairing, TACO_FILLINGS } from '../lib/conversation.js';
 import { readConversation, writeConversation, clearConversation, emptyConversation, appendUserTurn, appendAnswer, withContext, turnGuard, sanitizeAnswer } from '../lib/conversation-store.js';
 import { ownedMatches, cellarPick, bottleReason } from '../lib/cellarpick.js';
 import { supabase } from '../lib/supabase.js';
@@ -292,7 +292,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
   const showCurrent = (c)=>{
     if (!c || !c.current) return false;
     const d = hydrate(c.current.data);
-    setData(d); setAsked(c.current.asked||''); setQ(c.current.asked||''); setPhase(phaseFor(d));
+    setData(d); setAsked(c.current.asked||''); setPhase(phaseFor(d));
     return true;
   };
 
@@ -308,7 +308,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     const cleaned = saved ? sanitizeAnswer(saved.data) : null;
     if (!cleaned) return;
     const d = hydrate(cleaned);
-    setData(d); setAsked(saved.asked||''); setQ(saved.asked||'');
+    setData(d); setAsked(saved.asked||'');
     setPhase(phaseFor(d));
   // Mount-only by design: a restore happens once, before any question.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -374,7 +374,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     const slowTimer = setTimeout(()=>{
       if (guard.isCurrent(token) && mounted.current) setPhase('thinking-slow');
     }, 8_000);
-    const extra = { intent: plan.intent, context: plan.contextText || researchContext(convRef.current, pairingOf(convRef.current.current?.data)), history: historyFor(convRef.current) };
+    const extra = { intent: plan.intent, context: plan.contextText || researchContext(convRef.current, lastPairing(convRef.current)), history: historyFor(convRef.current) };
     try {
       if (!supabase) throw new Error('not configured');
       const r = await withTimeout(askSommelier(plan.question, wines, extra), RESEARCH_FIRST_TIMEOUT_MS);   // model classifies pairing vs. answer
@@ -434,7 +434,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
       opts = { ...opts, clarified: pending };
     }
     setPending(null); setQuestion(null);
-    setAsked(Q); setQ(Q); track('sommelier_question');
+    setAsked(Q); setQ(''); track('sommelier_question');
 
     const plan = planTurn(Q, convRef.current, opts);
     if (!plan) return;
@@ -531,7 +531,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
   // current question with its full context, expecting evidence.
   const checkSources = ()=>{
     const c = convRef.current;
-    const pairing = pairingOf(c.current?.data);
+    const pairing = lastPairing(c);
     const base = c.current?.effectiveQuery || c.current?.asked || asked;
     if (!base) return;
     const token = guard.next();
@@ -596,7 +596,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     if (d.mode==='cellar') return <CellarCard data={d} live={live} onOpen={onOpen}
       onShowShelf={()=>{ const p = hydrate({ ...d.pairing, cellarColor:d.options?.color||null, cellarDislike:d.options?.dislikeColors||[] }); setData(p); setPhase('pairing'); }}/>;
     if (d.mode==='explanation') return <ExplanationCard data={d} live={live} onAsk={(v)=>run(v)} onCheckSources={checkSources}
-      onBackToRecommendation={pairingOf(conv.current?.data) ? ()=>{ const p = hydrate(pairingOf(convRef.current.current.data)); setData(p); setPhase('pairing'); } : null}/>;
+      onBackToRecommendation={lastPairing(conv) ? ()=>{ const p = hydrate(lastPairing(convRef.current)); setData(p); setPhase('pairing'); } : null}/>;
     return <WrittenCard data={d}/>;
   };
 
