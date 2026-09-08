@@ -306,6 +306,13 @@ test('ADVERSARIAL: oversized nested values are capped everywhere; unknown fields
   assert.equal(sanitizeAnswer({ mode:'pairing', primary:'Syrah' }), null);
 });
 
+test('the legacy last-answer restore on the screen goes through the same sanitiser', () => {
+  const pairingScreenSource = readFileSync(new URL('../src/components/pairing.jsx', import.meta.url), 'utf8');
+  assert.match(pairingScreenSource, /const cleaned = saved \? sanitizeAnswer\(saved\.data\) : null;\s*if \(!cleaned\) return;\s*const d = hydrate\(cleaned\);/,
+    'a pre-conversation cached answer is sanitised before it is rendered');
+  assert.match(pairingScreenSource, /import \{[^}]*sanitizeAnswer[^}]*\} from '\.\.\/lib\/conversation-store\.js'/);
+});
+
 test('writing a conversation applies the same whitelist as reading it', () => {
   const store = fakeStorage();
   const c = thread();
