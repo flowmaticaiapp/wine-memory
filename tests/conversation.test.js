@@ -532,10 +532,15 @@ test('research follow-ups carry the meal and constraints, never cellar contents 
   assert.ok(h.every(t => t.text.length <= 300 && ['user','sommelier'].includes(t.role)));
 });
 
-test('the sommelier function validates conversation fields as untrusted input and keeps the privacy rule', () => {
-  assert.match(sommelierSource, /const context = clean\(body\.context, 600\)/);
-  assert.match(sommelierSource, /const history = cleanHistory\(body\.history\)/);
-  assert.match(sommelierSource, /INTENTS\.has\(body\.intent\)/);
+test('the sommelier function reads every request field through the shared sanitiser and keeps the privacy rule', () => {
+  assert.match(sommelierSource, /import \{ sanitizeSommelierRequest \} from "\.\.\/_shared\/request-sanitize\.js"/);
+  assert.match(sommelierSource, /const clean = sanitizeSommelierRequest\(body\);/);
+  assert.match(sommelierSource, /const \{ query, ownedGrapes, owned, context, intent \} = clean;/);
+  // No request field is read raw from the body any more.
+  const handler = sommelierSource.slice(sommelierSource.indexOf('Deno.serve'));
+  const rawReads = handler.match(/body\.[a-zA-Z]+/g) || [];
+  assert.deepEqual(rawReads, [], `raw body reads: ${rawReads.join(', ')}`);
+  assert.doesNotMatch(handler, /JSON\.stringify\(body/, 'nothing client-provided is serialised as-is');
   assert.match(sommelierSource, /Never put a person's name, street address, email, account detail, private note, or cellar contents into a search query/);
   assert.match(sommelierSource, /researchQuestion\(query, context\)/);
   assert.match(sommelierSource, /blocked_domains:\s*\["vivino\.com"\]/, 'the Vivino exclusion is preserved');

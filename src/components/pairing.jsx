@@ -21,7 +21,7 @@ import { relevantBuyAgainGrape } from '../lib/pairing-insight.js';
 import { readLastAnswer, writeLastAnswer } from '../lib/lastanswer.js';
 import { withTimeout, instantPairing, reconcileEnrichment, enrichmentDisposition, pairingBasis, RESEARCH_FIRST_TIMEOUT_MS, sommelierFailureMessage } from '../lib/answerflow.js';
 import { planTurn, composeClarified, followUpActions, summaryOf, researchQuestion, researchContext, historyFor, pairingOf, TACO_FILLINGS } from '../lib/conversation.js';
-import { readConversation, writeConversation, clearConversation, emptyConversation, appendUserTurn, appendAnswer, withContext, turnGuard } from '../lib/conversation-store.js';
+import { readConversation, writeConversation, clearConversation, emptyConversation, appendUserTurn, appendAnswer, withContext, turnGuard, sanitizeAnswer } from '../lib/conversation-store.js';
 import { ownedMatches, cellarPick, bottleReason } from '../lib/cellarpick.js';
 import { supabase } from '../lib/supabase.js';
 import { invokeAI } from '../lib/ai.js';
@@ -332,10 +332,12 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
   React.useEffect(()=>{
     if (didInit.current || initialQuery) return;
     if (showCurrent(convRef.current)) return;
-    // Pre-conversation cache, still honoured for one restore.
+    // Pre-conversation cache, still honoured for one restore — through the
+    // same deep sanitiser as the conversation store.
     const saved = readLastAnswer(userId);
-    if (!saved) return;
-    const d = hydrate(saved.data);
+    const cleaned = saved ? sanitizeAnswer(saved.data) : null;
+    if (!cleaned) return;
+    const d = hydrate(cleaned);
     setData(d); setAsked(saved.asked||''); setQ(saved.asked||'');
     setPhase(phaseFor(d));
   // Mount-only by design: a restore happens once, before any question.

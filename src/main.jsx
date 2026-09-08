@@ -66,7 +66,7 @@ function NavigationDrawer({ onClose, go, email, userId }){
   return <div style={{position:'absolute',inset:0,zIndex:110,background:'rgba(23,21,15,.25)'}} onClick={onClose}><aside role="dialog" aria-label="Navigation" onClick={e=>e.stopPropagation()} style={{width:'82%',height:'100%',background:'#fff',boxShadow:'12px 0 36px rgba(23,21,15,.18)',display:'flex',flexDirection:'column'}}><div style={{padding:'58px 22px 18px',borderBottom:`1px solid ${T.line}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontFamily:'var(--serif)',fontSize:23}}>Wine Memory</span><button aria-label="Close menu" onClick={onClose} style={{border:0,background:'none',padding:8,cursor:'pointer'}}><Icon name="x" size={22}/></button></div><nav style={{padding:'12px 12px',overflowY:'auto',flex:1}}>{rows.map(([label,id],i)=><React.Fragment key={id}>{(i===0||i===4||i===9)&&<div style={{fontSize:9.5,letterSpacing:'.2em',textTransform:'uppercase',color:T.ink4,padding:'13px 12px 6px'}}>{i===0?'Your wines':i===4?'Ask & learn':'Add'}</div>}<button onClick={()=>go(id)} style={{width:'100%',border:0,background:'none',padding:'11px 12px',textAlign:'left',fontFamily:'var(--serif)',fontSize:18,color:T.ink,cursor:'pointer'}}>{label}</button></React.Fragment>)}</nav><div style={{padding:'15px 22px 28px',borderTop:`1px solid ${T.line}`}}><button onClick={()=>go('account')} style={{border:0,background:'none',padding:0,fontSize:14,fontWeight:650,cursor:'pointer'}}>Account</button><div style={{fontSize:11,color:T.ink3,marginTop:4,overflow:'hidden',textOverflow:'ellipsis'}}>{email}</div><button onClick={()=>signOut(userId)} style={{border:0,background:'none',padding:'13px 0 0',fontSize:13,color:T.ink2,cursor:'pointer'}}>Sign out</button></div></aside></div>;
 }
 
-function AccountScreen({ email, provider }){
+function AccountScreen({ email, provider, userId }){
   const method = provider==='google' ? 'Google' : 'email magic link';
   return (
     <div style={{ height:'100%', overflowX:'hidden', overflowY:'auto', background:'#fff' }}>
@@ -80,7 +80,7 @@ function AccountScreen({ email, provider }){
             <div style={{ fontSize:13, color:T.ink3, marginTop:2 }}>Signed in with {method}</div>
           </div>
         </div>
-        <button onClick={signOut} style={{ width:'100%', marginTop:14, padding:'15px', borderRadius:13, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:15, fontWeight:680, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+        <button onClick={()=>signOut(userId)} style={{ width:'100%', marginTop:14, padding:'15px', borderRadius:13, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:15, fontWeight:680, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
           <Icon name="lock" size={17} color={T.ink}/> Sign out
         </button>
         <div style={{ marginTop:20, fontFamily:'var(--mono)', fontSize:10.5, color:T.ink4, letterSpacing:0.3 }}>Wine Memory</div>
@@ -228,7 +228,7 @@ function VApp({ session }){
         ? <PalatePlaceholder count={palateCount} onAdd={()=>setOverlay('addhub')} onExplore={()=>setTab('learn')} onLearn={()=>setOverlay('pour')}/>
         : <PalateScreen wines={wines} pairings={pairings} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask}/>)}
       {tab==='learn' && <ExploreScreen region={exploreRegion} wines={wines} onPick={setExploreRegion} onOpenWine={(id)=>setOverlay({detail:id})} onAsk={ask}/>}
-      {tab==='account' && <AccountScreen email={session.user.email} provider={session.user.app_metadata?.provider}/>}
+      {tab==='account' && <AccountScreen email={session.user.email} provider={session.user.app_metadata?.provider} userId={userId}/>}
 
       {!fullPanel && (<><VNav tab={tab} setTab={navTo}/><VFAB onClick={()=>setOverlay('addhub')}/></>)}
 
@@ -263,7 +263,7 @@ function VApp({ session }){
       <TweakRadio label="Buy / Maybe / No UI" value={t.verdictStyle} options={['expressive','subtle','glyph']} onChange={(v)=>setTweak('verdictStyle',v)} />
       <TweakSection label="Account" />
       <div style={{ fontSize:11, color:'rgba(41,38,27,.6)', wordBreak:'break-all' }}>{session.user.email}</div>
-      <TweakButton label="Sign out" secondary onClick={signOut} />
+      <TweakButton label="Sign out" secondary onClick={()=>signOut(userId)} />
     </TweaksPanel>
   );
 

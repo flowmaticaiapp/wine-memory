@@ -9,6 +9,7 @@
 import { gate } from "../_shared/auth.ts";
 import { citedEvidence, selectEvidenceSources } from "../_shared/research-evidence.js";
 import { verifiedSommelierBottle } from "../_shared/musttry-verify.js";
+import { sanitizeSommelierRequest } from "../_shared/request-sanitize.js";
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const MODEL = Deno.env.get("SOMMELIER_MODEL") ?? "claude-sonnet-4-6";
@@ -83,25 +84,14 @@ function anthropicHeaders(): Record<string, string> {
   };
 }
 
-// Conversation fields are UNTRUSTED client input: bounded in length, control
-// characters stripped, roles whitelisted. The client builds `context` from
-// dish and constraint concepts only; even so, nothing here is ever placed
-// into a search query except by the model under the privacy rule below.
-const clean = (v: unknown, max: number): string =>
-  typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, max) : "";
+// Every request field is UNTRUSTED client input and passes through
+// _shared/request-sanitize.js before it can reach a prompt: strings are
+// stripped of control characters and capped, lists are capped, owned-wine
+// entries are rebuilt from a whitelist (grape, region, verdict) and nothing
+// the client sent is serialised as-is. The client builds `context` from dish
+// and constraint concepts only; even so, nothing here is ever placed into a
+// search query except by the model under the privacy rule below.
 type Turn = { role: "user" | "sommelier"; text: string };
-function cleanHistory(v: unknown): Turn[] {
-  if (!Array.isArray(v)) return [];
-  const out: Turn[] = [];
-  for (const t of v.slice(-6)) {
-    if (!t || typeof t !== "object") continue;
-    const role = (t as { role?: unknown }).role;
-    const text = clean((t as { text?: unknown }).text, 300);
-    if ((role === "user" || role === "sommelier") && text) out.push({ role, text });
-  }
-  return out;
-}
-const INTENTS = new Set(["pairing", "cellar", "evaluate", "shop", "explain", "compare", "discover", "followup"]);
 
 async function researchQuestion(query: string, context = ""): Promise<{ evidence: Evidence[]; status: "researched" | "no_evidence" | "unavailable" }> {
   const prompt =
@@ -171,15 +161,14 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const query = typeof body.query === "string" ? body.query.trim() : "";
+    // Cleaned, capped and whitelisted — see _shared/request-sanitize.js.
+    // `owned` holds only { grape, region, verdict } per entry. The
+    // conversation fields are optional: this is a stateless function; the
+    // client holds the thread and sends only what this question needs.
+    const clean = sanitizeSommelierRequest(body);
+    const { query, ownedGrapes, owned, context, intent } = clean;
+    const history = clean.history as Turn[];
     if (query.length < 2) return json({ kind: "answer", text: "" });
-    const ownedGrapes = typeof body.ownedGrapes === "string" && body.ownedGrapes ? body.ownedGrapes : "none yet";
-    const owned = Array.isArray(body.owned) ? body.owned.slice(0, 80) : [];
-    // Optional conversation state (this is a stateless function; the client
-    // holds the thread and sends only what this question needs).
-    const context = clean(body.context, 600);
-    const history = cleanHistory(body.history);
-    const intent = typeof body.intent === "string" && INTENTS.has(body.intent) ? body.intent : "";
     const research = await researchQuestion(query, context);
     const evidenceText = research.evidence.length
       ? research.evidence.map(e => `[S${e.id}] ${e.title}\nURL: ${e.url}\nEvidence: ${e.citedText || "The cited page supported the research note."}`).join("\n\n")
@@ -216,7 +205,7 @@ Deno.serve(async (req) => {
       `For ANY OTHER question — explainers ("Explain Beaujolais"), comparisons ("Barolo vs Barbaresco"), self-reflection ("Why do I like Nebbiolo?"), ` +
       `shopping/what-to-buy, or general wine knowledge — set kind="answer" and write a friendly, concise reply in text: 2-4 short sentences, ` +
       `OR up to 4 short lines each starting with "- " for lists/comparisons. No preamble, no markdown headers. Leave dish/primary/others empty.\n\n` +
-      `The user owns these grapes/styles: ${ownedGrapes}. Full collection: ${JSON.stringify(owned)}. ` +
+      `The user owns these grapes/styles: ${ownedGrapes}. Collection (grape, region, verdict only): ${JSON.stringify(owned)}. ` +
       `Reference their collection when it's genuinely relevant (e.g. why they like a grape, or what to buy that fits their taste).\n` +
       `GROUNDING: for a pairing "why"/"deeper", reference only ingredients, sauces, or flavours present in or reasonably inferred from the question or the conversation context — never introduce a protein or dish the user did not mention.\n\n` +
       (context || history.length

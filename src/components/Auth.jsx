@@ -3,8 +3,7 @@
 import React, { useState } from 'react';
 import { T } from '../lib/data.js';
 import { supabase, supabaseConfigured } from '../lib/supabase.js';
-import { clearLastAnswer } from '../lib/lastanswer.js';
-import { clearConversation } from '../lib/conversation-store.js';
+import { performSignOut } from '../lib/signout.js';
 
 const wrap = { minHeight:'100vh', background:T.canvas, display:'flex', alignItems:'center', justifyContent:'center', padding:24, boxSizing:'border-box' };
 const card = { width:'100%', maxWidth:360, background:T.bg, borderRadius:20, padding:'40px 28px', boxShadow:'0 10px 40px rgba(22,20,15,0.10), 0 1px 2px rgba(22,20,15,0.05)' };
@@ -133,14 +132,10 @@ export function AuthScreen(){
 
 // On sign-out, the cached last pairing answer AND the sommelier conversation
 // are cleared so nothing from this account lingers for the next person who
-// signs in on the same device.
-export async function signOut(){
+// signs in on the same device. Callers pass the user id the app already
+// knows: clearing happens before any network request and does not depend on
+// asking Supabase who the user is (see lib/signout.js).
+export async function signOut(userId){
   if (!supabase) return;
-  try {
-    const { data } = await supabase.auth.getUser();
-    const id = data && data.user ? data.user.id : null;
-    clearLastAnswer(id);
-    clearConversation(id);
-  } catch { /* clearing the cache must never block sign-out */ }
-  await supabase.auth.signOut();
+  await performSignOut(typeof userId === 'string' ? userId : null, supabase.auth);
 }
