@@ -322,3 +322,24 @@ test('writing a conversation applies the same whitelist as reading it', () => {
   assert.ok(!raw.includes('Private Domaine') && !raw.includes('my note') && !raw.includes('javascript') && !raw.includes('invented'));
   assert.equal(JSON.parse(raw).current.data.primary.why.length, 600);
 });
+
+test('each sommelier turn keeps its own sanitised answer so the thread can show earlier answers', () => {
+  const store = fakeStorage();
+  let c = thread();
+  c = appendUserTurn(c, 'white instead', 'pairing');
+  c = appendAnswer(c, { asked:'white instead', summary:'Off-dry Riesling', data:{ mode:'pairing', primary:{ grape:'Off-dry Riesling', why:LONG }, others:[], sources:[{ title:'x', url:'javascript:1' }], owned:[{ producer:'Private' }] }, intent:'pairing', mode:'pairing' });
+  writeConversation('u', c, store);
+  const back = readConversation('u', store);
+  const answers = back.turns.filter(t => t.role === 'sommelier');
+  assert.equal(answers.length, 2);
+  assert.equal(answers[0].data.primary.grape, 'Dry Rosé', 'the first answer is still readable');
+  assert.equal(answers[1].data.primary.grape, 'Off-dry Riesling');
+  assert.equal(answers[1].data.primary.why.length, 600, 'bounded like the current answer');
+  assert.equal(answers[1].data.sources, undefined, 'a bad source is gone');
+  assert.equal(answers[1].data.owned, undefined, 'live cellar rows never persist');
+  // Junk data on a turn is dropped without dropping the turn.
+  store.setItem(conversationKeyFor('u'), JSON.stringify({ ...c, at: Date.now(), turns: [...c.turns, { role:'sommelier', at: Date.now(), text:'x', data:{ mode:'pairing' } }] }));
+  const again = readConversation('u', store);
+  assert.equal(again.turns.length, 5);
+  assert.equal(again.turns[4].data, undefined);
+});

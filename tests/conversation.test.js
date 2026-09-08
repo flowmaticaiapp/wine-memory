@@ -610,10 +610,15 @@ test('guided and seeded questions are new topics, never follow-ups', () => {
 });
 
 test('the guided tonight answer offers follow-up actions, and "why this?" explains the bottle decision', () => {
-  // The screen renders the follow-up bar on every pairing answer, including the guided tonight one.
-  const pairingBlock = pairingScreenSource.slice(pairingScreenSource.indexOf("phase==='pairing' && data"));
-  assert.match(pairingBlock, /^\s*<FollowUpBar data=\{data\} onAsk=\{\(v\)=>run\(v\)\} onFocusInput=\{focusInput\}\/>/m, 'the bar is unconditional on the pairing answer');
-  assert.doesNotMatch(pairingBlock, /!data\.guidedTonight && <FollowUpBar/);
+  // Chat layout: quick replies sit above the composer for every current
+  // answer (pairing, written, explanation, cellar), never gated on the flow.
+  const composer = pairingScreenSource.slice(pairingScreenSource.indexOf('Quick replies + composer'));
+  assert.match(composer, /\{showingAnswer && <FollowUpBar data=\{data\} onAsk=\{\(v\)=>run\(v\)\}\/>\}/, 'one bar, above the composer, for any current answer');
+  assert.doesNotMatch(pairingScreenSource, /guidedTonight && <FollowUpBar/);
+  assert.match(pairingScreenSource, /const showingAnswer = \['pairing','answer','explanation','cellar'\]\.includes\(phase\) && data && !data\.transient;/);
+  // The thread shows every earlier answer from its stored, sanitised data.
+  assert.match(pairingScreenSource, /turns\.map\(\(t,i\)=> t\.role==='user'/);
+  assert.match(pairingScreenSource, /t\.data \? cardFor\(hydrate\(t\.data\), false\)/);
   // Actions on a tonight answer omit the redundant cellar check.
   const tonight = { mode:'pairing', guidedTonight:true, tonightReason:'It fits steak and gives you bold tonight.', primary:{ grape:'Malbec' }, others:[] };
   const labels = followUpActions(tonight).map(a => a.label);

@@ -226,46 +226,17 @@ function SommelierMark(){
   </div>;
 }
 
-// The conversation so far, above the current answer. Compact on purpose: the
-// point is that the user can see what the sommelier already knows, not a
-// transcript to scroll.
-function Thread({ turns, onNew }){
-  const [open, setOpen] = pUS(false);
-  if (!turns || !turns.length) return null;
-  const shown = open ? turns : turns.slice(-4);
-  return <div style={{ marginBottom:16, paddingBottom:12, borderBottom:`1px solid ${T.line}` }}>
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-      <span style={{ fontFamily:'var(--mono)', fontSize:9.5, color:T.ink3, letterSpacing:'.13em', textTransform:'uppercase' }}>This conversation</span>
-      <div style={{ display:'flex', gap:12 }}>
-        {turns.length > 4 && <button onClick={()=>setOpen(v=>!v)} style={{ background:'none', border:'none', padding:0, cursor:'pointer', fontFamily:'var(--sans)', fontSize:11.5, color:T.ink3 }}>{open ? 'Show less' : `Show all ${Math.ceil(turns.length/2)}`}</button>}
-        <button onClick={onNew} style={{ background:'none', border:'none', padding:0, cursor:'pointer', fontFamily:'var(--sans)', fontSize:11.5, fontWeight:620, color:T.ink2 }}>New question</button>
-      </div>
-    </div>
-    <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
-      {shown.map((t,i)=> t.role==='user'
-        ? <div key={i} style={{ fontSize:12.5, color:T.ink2, lineHeight:1.4 }}><span style={{ color:T.ink4 }}>You · </span>{t.text}</div>
-        : <div key={i} style={{ fontSize:12.5, color:T.ink3, lineHeight:1.4, paddingLeft:10, borderLeft:`2px solid ${T.line2}` }}>{t.text}</div>)}
-    </div>
-  </div>;
-}
-
-// Useful next moves after an answer. Each is an ordinary question the engine
-// understands, so a tap and a typed sentence take the same path.
-function FollowUpBar({ data, onAsk, onFocusInput }){
+// Quick replies above the composer, like a chat. Each is an ordinary
+// question the engine understands, so a tap and a typed sentence take the
+// same path. One horizontally scrollable row keeps the composer close.
+function FollowUpBar({ data, onAsk }){
   const actions = followUpActions(data);
   if (!actions.length) return null;
-  return <div style={{ marginTop:20 }}>
-    <div style={{ fontFamily:'var(--mono)', fontSize:9.5, color:T.ink3, letterSpacing:'.13em', textTransform:'uppercase', marginBottom:8 }}>Keep going</div>
-    <div style={{ display:'flex', flexWrap:'wrap', gap:7 }}>
-      {actions.map((a)=>(
-        <button key={a.label} onClick={()=>onAsk(a.value)}
-          style={{ padding:'7px 12px', borderRadius:99, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2,
-            fontFamily:'var(--sans)', fontSize:12.5, fontWeight:560, cursor:'pointer' }}>{a.label}</button>
-      ))}
-      <button onClick={onFocusInput}
-        style={{ padding:'7px 12px', borderRadius:99, border:`1px solid ${T.ink}`, background:T.ink, color:'#fff',
-          fontFamily:'var(--sans)', fontSize:12.5, fontWeight:600, cursor:'pointer' }}>Ask a follow-up</button>
-    </div>
+  return <div style={{ display:'flex', gap:7, overflowX:'auto', margin:'0 -12px 8px', padding:'2px 12px 6px', scrollbarWidth:'none' }}>
+    {actions.map((a)=>(
+      <button key={a.label} onClick={()=>onAsk(a.value)} style={{ flexShrink:0, padding:'7px 12px', borderRadius:99, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2,
+        fontFamily:'var(--sans)', fontSize:12.5, fontWeight:560, cursor:'pointer', whiteSpace:'nowrap' }}>{a.label}</button>
+    ))}
   </div>;
 }
 
@@ -289,7 +260,6 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
   const [asked, setAsked] = pUS('');
   const [guideMeal, setGuideMeal] = pUS(null);
   const [saved, setSaved] = pUS(false);
-  const [showWhy, setShowWhy] = pUS(false);   // depth stays closed by default
   const [conv, setConv] = pUS(()=> readConversation(userId) || emptyConversation());
   const [pending, setPending] = pUS(null);    // the clarification being answered
   const [question, setQuestion] = pUS(null);  // the generic clarification on screen
@@ -590,7 +560,7 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
       guidedTonight:true, mood:mood.id, mealLabel:guideMeal?.label||'No food', hasMeal:!!guideMeal?.query,
     });
   };
-  pUE(()=>{ setSaved(false); setShowWhy(false); }, [asked]);
+  pUE(()=>{ setSaved(false); }, [asked]);
   // A question seeded from Home or the drawer is a deliberate new topic.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(()=>{ if(initialQuery && !didInit.current){ didInit.current=true; run(initialQuery, { newTopic:true }); } }, [initialQuery]);
@@ -603,263 +573,296 @@ function PairingSearch({ wines, userId, onClose, onOpen, initialQuery, onSavePai
     setSaved(true);
   };
 
-  const focusInput = ()=>{ setQ(''); setTimeout(()=>inputRef.current && inputRef.current.focus(), 0); };
-  const insightGrape = data && data.mode==='pairing' ? relevantBuyAgainGrape(wines, data) : null;
-  const inConversation = !!(conv && conv.current);
-  // Turns before the current exchange, for the thread.
-  const priorTurns = (()=>{
-    const t = conv?.turns || [];
-    if (!inConversation) return [];
-    // Drop the trailing exchange (the answer on screen and its question).
-    let end = t.length;
-    if (end && t[end-1].role==='sommelier') end -= 1;
-    if (end && t[end-1].role==='user') end -= 1;
-    return t.slice(0, end);
-  })();
-  const cellarLead = data && data.mode==='pairing' && (data.guidedTonight || data.leadWithCellar) && data.owned && data.owned.length>0;
-  const showingAnswer = ['pairing','answer','explanation','cellar'].includes(phase) && data;
+  const focusInput = ()=>{ setTimeout(()=>inputRef.current && inputRef.current.focus(), 0); };
+  const inConversation = !!(conv && conv.turns && conv.turns.length);
+  const showingAnswer = ['pairing','answer','explanation','cellar'].includes(phase) && data && !data.transient;
+  const turns = conv?.turns || [];
+  let lastSommelier = -1;
+  for (let i = turns.length - 1; i >= 0; i--){ if (turns[i].role === 'sommelier'){ lastSommelier = i; break; } }
+  const lastTurn = turns[turns.length-1];
+  // The question in flight (clarifying, thinking, or a transient failure) is
+  // not yet a stored turn; it still belongs in the thread.
+  const inFlight = ['guide-taco','guide-meal','guide-mood','clarify','thinking','thinking-slow'].includes(phase) || (phase==='answer' && data && data.transient);
+  const pendingAsk = inFlight && asked && !(lastTurn && lastTurn.role==='user' && lastTurn.text===asked) ? asked : '';
+
+  // Keep the newest content in view, like a chat.
+  const threadRef = React.useRef(null);
+  React.useEffect(()=>{ const el = threadRef.current; if (el) el.scrollTop = el.scrollHeight; }, [turns.length, phase]);
+
+  const cardFor = (d, live)=>{
+    if (!d) return null;
+    if (d.mode==='pairing') return <PairingCard data={d} live={live} onOpen={onOpen} saved={saved} onSave={onSavePairing ? savePairing : null} wines={wines}
+      onChangeMeal={()=>{ setGuideMeal(null); setPending({ id:'tonight-meal', original:asked, intent:'cellar' }); setPhase('guide-meal'); }}/>;
+    if (d.mode==='cellar') return <CellarCard data={d} live={live} onOpen={onOpen}
+      onShowShelf={()=>{ const p = hydrate({ ...d.pairing, cellarColor:d.options?.color||null, cellarDislike:d.options?.dislikeColors||[] }); setData(p); setPhase('pairing'); }}/>;
+    if (d.mode==='explanation') return <ExplanationCard data={d} live={live} onAsk={(v)=>run(v)} onCheckSources={checkSources}
+      onBackToRecommendation={pairingOf(conv.current?.data) ? ()=>{ const p = hydrate(pairingOf(convRef.current.current.data)); setData(p); setPhase('pairing'); } : null}/>;
+    return <WrittenCard data={d}/>;
+  };
 
   return (
     <div style={{ position:'absolute', inset:0, zIndex:75, background:'#fff', display:'flex', flexDirection:'column' }}>
+      {/* Header: back, title, new conversation */}
       <div style={{ paddingTop:V_STATUS, borderBottom:`1px solid ${T.line}`, flexShrink:0 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px 12px' }}>
-          <div style={{ flex:1, display:'flex', alignItems:'center', gap:9, background:T.raised, border:`1.5px solid ${q?T.ink:T.line}`, borderRadius:12, padding:'0 12px', height:46 }}>
-            <Icon name="sparkle" size={17} color={T.maybe}/>
-            <input ref={inputRef} autoFocus value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') run(); }}
-              placeholder={pending ? 'Type your answer…' : inConversation ? 'Ask a follow-up, or something new…' : 'Ask your sommelier…'}
-              style={{ flex:1, border:'none', outline:'none', background:'transparent', fontFamily:'var(--sans)', fontSize:15.5, color:T.ink }}/>
-            {q && <button onClick={()=>{ setQ(''); if(!showingAnswer && phase!=='clarify' && !phase.startsWith('guide')) setPhase('idle'); }} style={{ background:'none', border:'none', cursor:'pointer', padding:4, display:'flex' }}><Icon name="x" size={16} color={T.ink3}/></button>}
-          </div>
-          {q.trim() && q.trim() !== asked
-            ? <button onClick={()=>run()} style={{ background:'none', border:'none', cursor:'pointer', color:T.ink, fontFamily:'var(--sans)', fontSize:15, fontWeight:700 }}>Ask</button>
-            : <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:T.ink, fontFamily:'var(--sans)', fontSize:15, fontWeight:600 }}>Done</button>}
+        <div style={{ display:'grid', gridTemplateColumns:'56px 1fr 56px', alignItems:'center', height:48, padding:'0 6px' }}>
+          <button aria-label="Back" onClick={onClose} style={{ border:0, background:'none', padding:8, cursor:'pointer', justifySelf:'start', display:'flex' }}><Icon name="back" size={21} color={T.ink}/></button>
+          <div style={{ fontFamily:'var(--serif)', fontSize:19, textAlign:'center', color:T.ink }}>Your sommelier</div>
+          {inConversation
+            ? <button onClick={startNew} style={{ border:0, background:'none', padding:'8px 6px', cursor:'pointer', justifySelf:'end', fontFamily:'var(--sans)', fontSize:13.5, fontWeight:640, color:T.ink2 }}>New</button>
+            : <div/>}
         </div>
       </div>
 
-      <div style={{ flex:1, overflowX:'hidden', overflowY:'auto', padding:'16px 16px 40px' }}>
-        {phase==='idle' && <>
-          {inConversation && <div style={{ marginBottom:16, padding:'12px 14px', border:`1px solid ${T.line}`, borderRadius:12, background:T.canvas, display:'flex', alignItems:'center', gap:10 }}>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontFamily:'var(--mono)', fontSize:9.5, color:T.ink3, letterSpacing:'.13em', textTransform:'uppercase' }}>Continuing</div>
-              <div style={{ fontSize:13, color:T.ink2, marginTop:3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>“{conv.current.asked}”</div>
-            </div>
-            <button onClick={()=>showCurrent(convRef.current)} style={{ background:'none', border:`1px solid ${T.line2}`, borderRadius:99, padding:'6px 11px', cursor:'pointer', fontFamily:'var(--sans)', fontSize:12, fontWeight:600, color:T.ink2 }}>Back to it</button>
-            <button onClick={startNew} style={{ background:'none', border:'none', padding:0, cursor:'pointer', fontFamily:'var(--sans)', fontSize:12, fontWeight:600, color:T.ink3 }}>New</button>
-          </div>}
-          <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, letterSpacing:0.4, marginBottom:12, textTransform:'uppercase' }}>Ask your sommelier</div>
-          <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
+      {/* The thread */}
+      <div ref={threadRef} style={{ flex:1, overflowX:'hidden', overflowY:'auto', padding:'14px 16px 12px' }}>
+        {!inConversation && !inFlight && phase==='idle' && <SommelierBubble>
+          <div style={{ fontSize:15, color:T.ink, lineHeight:1.5 }}>Tell me what you’re eating, what you want to open, or what you’d like to understand. Ask follow-ups — I remember the meal.</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:12 }}>
             {EXAMPLES.map(ex=>(
-              <button key={ex} onClick={()=>run(ex, { newTopic:true })} style={{ display:'flex', alignItems:'center', gap:11, textAlign:'left', padding:'13px 14px', border:`1px solid ${T.line}`, background:'#fff', borderRadius:12, cursor:'pointer' }}>
-                <Icon name="glass" size={17} color={T.maybe}/>
-                <span style={{ flex:1, fontSize:14.5, color:T.ink, fontWeight:540 }}>{ex}</span>
-                <Icon name="arrow" size={16} color={T.ink3}/>
+              <button key={ex} onClick={()=>run(ex, { newTopic:true })} style={{ display:'flex', alignItems:'center', gap:10, textAlign:'left', padding:'11px 12px', border:`1px solid ${T.line}`, background:'#fff', borderRadius:12, cursor:'pointer' }}>
+                <Icon name="glass" size={16} color={T.maybe}/>
+                <span style={{ flex:1, fontSize:14, color:T.ink, fontWeight:540 }}>{ex}</span>
+                <Icon name="arrow" size={15} color={T.ink3}/>
               </button>
             ))}
           </div>
-          <div style={{ marginTop:18, fontSize:12.5, color:T.ink4, lineHeight:1.5, display:'flex', gap:8 }}><Icon name="sparkle" size={14} color={T.ink4}/> Each answer explains the style and region, then shows the bottles you already own that fit. Ask follow-ups — the sommelier remembers the meal.</div>
-        </>}
+        </SommelierBubble>}
 
-        {phase==='guide-taco' && <TacoChoices onChoose={chooseTaco}/>}
-        {phase==='guide-meal' && <TonightChoices step="meal" meal={guideMeal} onMeal={chooseMeal} onMood={chooseMood}/>}
-        {phase==='guide-mood' && <TonightChoices step="mood" meal={guideMeal} onMeal={chooseMeal} onMood={chooseMood}/>}
-        {phase==='clarify' && question && <>
-          {priorTurns.length>0 && <Thread turns={priorTurns} onNew={startNew}/>}
-          <div style={{ fontSize:12.5, color:T.ink3, marginBottom:4 }}>You asked <span style={{ color:T.ink2, fontWeight:600 }}>“{asked}”</span></div>
-          <ChoiceQuestion question={question} onChoose={answerClarification}/>
-        </>}
+        {turns.map((t,i)=> t.role==='user'
+          ? <UserBubble key={i} text={t.text}/>
+          : <SommelierBubble key={i}>{
+              i===lastSommelier && showingAnswer
+                ? cardFor(data, true)
+                : (t.data ? cardFor(hydrate(t.data), false) : <div style={{ fontSize:14.5, color:T.ink, lineHeight:1.5 }}>{t.text}</div>)
+            }</SommelierBubble>)}
 
-        {(phase==='thinking' || phase==='thinking-slow') && <div style={{ paddingTop:60, display:'flex', flexDirection:'column', alignItems:'center' }}>
-          <Spinner size={40} stroke={3}/>
-          <div style={{ fontSize:15.5, fontWeight:680, marginTop:18 }}>{phase==='thinking-slow'?'Still checking sources…':'Thinking it through…'}</div>
-          <div style={{ fontSize:13, color:T.ink3, marginTop:5, textAlign:'center', maxWidth:'30ch' }}>{phase==='thinking-slow'?'Public wine research is taking a little longer than usual.':'Finding the best answer for “'+asked+'”.'}</div>
-          <button onClick={cancel} style={{ marginTop:22, padding:'9px 16px', borderRadius:99, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:13, fontWeight:600, cursor:'pointer' }}>Cancel</button>
-        </div>}
+        {pendingAsk && <UserBubble text={pendingAsk}/>}
 
-        {phase==='answer' && data && <>
-          {priorTurns.length>0 && !data.transient && <Thread turns={priorTurns} onNew={startNew}/>}
-          <div style={{ fontSize:13, color:T.ink3, marginBottom:14 }}>You asked <span style={{ color:T.ink, fontWeight:620 }}>“{asked}”</span></div>
-          <SommelierMark/>
+        {phase==='guide-taco' && <SommelierBubble><TacoChoices onChoose={chooseTaco}/></SommelierBubble>}
+        {phase==='guide-meal' && <SommelierBubble><TonightChoices step="meal" meal={guideMeal} onMeal={chooseMeal} onMood={chooseMood}/></SommelierBubble>}
+        {phase==='guide-mood' && <SommelierBubble><TonightChoices step="mood" meal={guideMeal} onMeal={chooseMeal} onMood={chooseMood}/></SommelierBubble>}
+        {phase==='clarify' && question && <SommelierBubble><ChoiceQuestion question={question} onChoose={answerClarification}/></SommelierBubble>}
+
+        {(phase==='thinking' || phase==='thinking-slow') && <SommelierBubble>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <Spinner size={18} stroke={2.4}/>
+            <div>
+              <div style={{ fontSize:14.5, fontWeight:660, color:T.ink }}>{phase==='thinking-slow'?'Still checking sources…':'Thinking it through…'}</div>
+              <div style={{ fontSize:12.5, color:T.ink3, marginTop:2 }}>{phase==='thinking-slow'?'Public wine research is taking a little longer than usual.':'Checking public wine sources.'}</div>
+            </div>
+          </div>
+          <button onClick={cancel} style={{ marginTop:12, padding:'7px 14px', borderRadius:99, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:12.5, fontWeight:600, cursor:'pointer' }}>Cancel</button>
+        </SommelierBubble>}
+
+        {phase==='answer' && data && data.transient && <SommelierBubble>
           <AnswerText text={data.text}/>
-          {!data.transient && <BasisLine basis={data.basis} sources={data.sources}/>}
-          {!data.transient && <FollowUpBar data={data} onAsk={(v)=>run(v)} onFocusInput={focusInput}/>}
-          {data.transient && inConversation && <button onClick={()=>showCurrent(convRef.current)} style={{ width:'100%', marginTop:22, padding:'13px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:14, fontWeight:600, cursor:'pointer' }}>Back to the previous answer</button>}
-          <button onClick={startNew} style={{ width:'100%', marginTop:10, padding:'13px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:14, fontWeight:600, cursor:'pointer' }}>New question</button>
-        </>}
+          {conv.current && <button onClick={()=>showCurrent(convRef.current)} style={{ marginTop:12, padding:'8px 14px', borderRadius:99, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:12.5, fontWeight:600, cursor:'pointer' }}>Back to the previous answer</button>}
+        </SommelierBubble>}
+      </div>
 
-        {phase==='explanation' && data && <>
-          {priorTurns.length>0 && <Thread turns={priorTurns} onNew={startNew}/>}
-          <div style={{ fontSize:13, color:T.ink3, marginBottom:14 }}>You asked <span style={{ color:T.ink, fontWeight:620 }}>“{asked}”</span></div>
-          <SommelierMark/>
-          <AnswerText text={data.text}/>
-          {(data.sources||[]).length>0 && <div style={{ marginTop:14, padding:'12px 14px', background:T.canvas, border:`1px solid ${T.line}`, borderRadius:12 }}>
-            <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.13em', textTransform:'uppercase', color:T.ink3, marginBottom:7 }}>Sources used</div>
-            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-              {data.sources.map((s,i)=><a key={i} href={s.url} target="_blank" rel="noopener noreferrer" style={{ fontSize:13, color:T.ink2, lineHeight:1.4 }}>{s.title}</a>)}
-            </div>
-          </div>}
-          <Factors factors={data.factors}/>
-          {data.offerResearch && <button onClick={checkSources} style={{ marginTop:14, padding:'10px 14px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:640, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:7 }}><Icon name="search" size={14} color={T.ink}/>Check public sources</button>}
-          {(data.choices||[]).length>0 && <div style={{ marginTop:16, display:'flex', flexWrap:'wrap', gap:7 }}>
-            {data.choices.map((c)=><button key={c.label} onClick={()=> c.value==='__research' ? checkSources() : run(c.value)}
-              style={{ padding:'7px 12px', borderRadius:99, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:12.5, fontWeight:560, cursor:'pointer' }}>{c.label}</button>)}
-          </div>}
-          <BasisLine basis={data.basis} sources={[]}/>
-          <FollowUpBar data={data} onAsk={(v)=>run(v)} onFocusInput={focusInput}/>
-          {pairingOf(conv.current?.data) && <button onClick={()=>{ const p = hydrate(pairingOf(convRef.current.current.data)); setData(p); setPhase('pairing'); }} style={{ width:'100%', marginTop:18, padding:'12px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, cursor:'pointer' }}>Back to the recommendation</button>}
-          <button onClick={startNew} style={{ width:'100%', marginTop:10, padding:'13px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:14, fontWeight:600, cursor:'pointer' }}>New question</button>
-        </>}
-
-        {phase==='cellar' && data && data.picks && <>
-          {priorTurns.length>0 && <Thread turns={priorTurns} onNew={startNew}/>}
-          <div style={{ fontSize:12.5, color:T.ink3, marginBottom:12 }}>You asked <span style={{ color:T.ink2, fontWeight:600 }}>“{asked}”</span></div>
-          <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.maybe, letterSpacing:'.13em', textTransform:'uppercase', marginBottom:9 }}>From your cellar{data.pairing?.dish ? ` · ${data.pairing.dish}` : ''}</div>
-          {data.picks.lead ? <>
-            <OwnedRow w={data.picks.lead.wine} onOpen={onOpen}/>
-            <div style={{ fontSize:14, color:T.ink2, lineHeight:1.5, marginTop:5 }}>{data.picks.lead.reason}</div>
-            {data.picks.alternatives.length>0 && <div style={{ marginTop:20 }}>
-              <div style={{ fontSize:15.5, fontWeight:720, letterSpacing:-0.3, marginBottom:9 }}>{data.picks.alternatives.length>1 ? 'Two other good choices' : 'Another good choice'}</div>
-              {data.picks.alternatives.map((a)=><div key={a.wine.id} style={{ marginBottom:12 }}>
-                <div style={{ fontFamily:'var(--mono)', fontSize:9.5, color:T.maybe, letterSpacing:'.11em', textTransform:'uppercase', marginBottom:5 }}>{a.direction}</div>
-                <OwnedRow w={a.wine} onOpen={onOpen}/>
-                <div style={{ fontSize:13, color:T.ink2, lineHeight:1.45, marginTop:-3 }}>{a.reason}</div>
-              </div>)}
-            </div>}
-            <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, marginTop:6 }}>{data.picks.count} fitting wine{data.picks.count>1?'s':''} in your cellar · samples excluded</div>
-          </> : <div style={{ padding:'14px', border:`1px dashed ${T.line2}`, borderRadius:12, background:T.canvas, fontSize:13.5, color:T.ink2, lineHeight:1.5 }}>{data.picks.note}</div>}
-          <button onClick={()=>{ const p = hydrate({ ...data.pairing, cellarColor:data.options?.color||null, cellarDislike:data.options?.dislikeColors||[] }); setData(p); setPhase('pairing'); }} style={{ width:'100%', marginTop:18, padding:'12px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, cursor:'pointer' }}>{data.picks.lead ? 'Show what to look for if you buy' : 'Show what to look for'}</button>
-          <BasisLine basis="cellar" sources={[]}/>
-          <FollowUpBar data={data} onAsk={(v)=>run(v)} onFocusInput={focusInput}/>
-          <button onClick={startNew} style={{ width:'100%', marginTop:10, padding:'13px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:14, fontWeight:600, cursor:'pointer' }}>New question</button>
-        </>}
-
-        {phase==='pairing' && data && <>
-          {priorTurns.length>0 && <Thread turns={priorTurns} onNew={startNew}/>}
-          {/* The question stays visible — someone refining in an aisle needs to
-              see what was actually asked. */}
-          <div style={{ fontSize:12.5, color:T.ink3, marginBottom:12 }}>You asked <span style={{ color:T.ink2, fontWeight:600 }}>“{asked}”</span></div>
-
-          {data.adjusted==='color' && <div style={{ fontFamily:'var(--mono)', fontSize:10, color:T.ink3, letterSpacing:'.12em', textTransform:'uppercase', marginBottom:10 }}>Switched to a {({red:'red',white:'white',rose:'rosé',sparkling:'sparkling',fortified:'fortified'})[data.swappedTo]||data.swappedTo} for {data.dish}</div>}
-          {data.adjusted==='heat' && <div style={{ fontFamily:'var(--mono)', fontSize:10, color:T.ink3, letterSpacing:'.12em', textTransform:'uppercase', marginBottom:10 }}>Adjusted for the heat</div>}
-
-          {cellarLead && <>
-            <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.maybe, letterSpacing:'.13em', textTransform:'uppercase', marginBottom:9 }}>{data.guidedTonight ? 'Tonight’s bottle' : 'Open this one'}</div>
-            <OwnedRow w={data.owned[0]} onOpen={onOpen}/>
-            <div style={{ fontSize:14, color:T.ink2, lineHeight:1.5, marginTop:5 }}>{data.tonightReason || bottleReason(data.owned[0], data)}</div>
-            {data.owned.length>1 && <div style={{ marginTop:20 }}>
-              <div style={{ fontSize:15.5, fontWeight:720, letterSpacing:-0.3, marginBottom:9 }}>{data.owned.length>2 ? 'Two other good choices' : 'Another good choice'}</div>
-              {data.owned.slice(1,3).map(w=><div key={w.id} style={{ marginBottom:12 }}>
-                <div style={{ fontFamily:'var(--mono)', fontSize:9.5, color:T.maybe, letterSpacing:'.11em', textTransform:'uppercase', marginBottom:5 }}>{alternativeDirection(data.owned[0],w)}</div>
-                <OwnedRow w={w} onOpen={onOpen}/>
-              </div>)}
-            </div>}
-          </>}
-          {(data.guidedTonight || data.leadWithCellar) && !data.owned.length && <div style={{ marginBottom:16, padding:'13px 14px', border:`1px dashed ${T.line2}`, borderRadius:12, background:T.canvas, fontSize:13.5, color:T.ink2, lineHeight:1.5 }}>
-            Nothing you currently own fits closely enough. Here is the style to look for instead.
-          </div>}
-
-          {/* ── The ten-second block ──────────────────────────────────
-              Recommendation before explanation. Everything a hurried shopper
-              needs to locate a bottle sits above this fold; depth is behind
-              "Why this?". */}
-          {(!data.guidedTonight || !data.owned.length) && <>
-          {data.leadWithCellar && data.owned.length>0 && <div style={{ fontSize:15.5, fontWeight:740, letterSpacing:-0.35, marginTop:22, marginBottom:6, paddingTop:18, borderTop:`2px solid ${T.line2}` }}>If you buy instead</div>}
-          {pairingHeadline(data) && <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.maybe, letterSpacing:'.13em', textTransform:'uppercase', marginBottom:10 }}>{pairingHeadline(data)}</div>}
-          <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.ink3, letterSpacing:'.14em', textTransform:'uppercase' }}>Look for</div>
-          <div style={{ fontSize:30, fontWeight:790, letterSpacing:-0.9, color:T.ink, lineHeight:1.05, marginTop:4 }}>{data.primary.grape}</div>
-
-          {data.primary.deeperTitle && <div style={{ marginTop:12 }}>
-            <span style={{ fontFamily:'var(--mono)', fontSize:10, color:T.maybe, letterSpacing:'.12em', textTransform:'uppercase' }}>Best bet</span>
-            <div style={{ fontSize:16.5, fontWeight:700, color:T.ink, letterSpacing:-0.3, marginTop:3 }}>{data.primary.deeperTitle}</div>
-          </div>}
-
-          {data.primary.bottle && <div style={{ marginTop:14, padding:'12px 14px', border:`1px solid ${T.buy}`, background:T.buyBg, borderRadius:12 }}>
-            <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.13em', textTransform:'uppercase', color:T.buy }}>Source-verified bottle</div>
-            <div style={{ fontSize:15.5, fontWeight:720, color:T.ink, marginTop:4 }}>{data.primary.bottle}</div>
-            {data.primary.bottleWhy && <div style={{ fontSize:13, color:T.ink2, lineHeight:1.45, marginTop:4 }}>{data.primary.bottleWhy}</div>}
-          </div>}
-
-          <div style={{ fontSize:14.5, color:T.ink2, lineHeight:1.5, marginTop:8 }}>{data.primary.why}</div>
-
-          {/* On the shelf — the exact words to look for */}
-          {(data.primary.lookFor||[]).length>0 && <div style={{ marginTop:14, padding:'12px 14px', background:T.canvas, border:`1px solid ${T.line}`, borderRadius:12 }}>
-            <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.13em', textTransform:'uppercase', color:T.ink3, marginBottom:7 }}>On the label</div>
-            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-              {data.primary.lookFor.slice(0,3).map((t,i)=>(
-                <div key={i} style={{ display:'flex', gap:8, fontSize:13, color:T.ink2, lineHeight:1.4 }}>
-                  <span style={{ flexShrink:0, width:4, height:4, borderRadius:99, background:T.ink4, marginTop:6 }}/><span>{t}</span>
-                </div>
-              ))}
-            </div>
-          </div>}
-
-          {/* Also works — one line, never a second essay */}
-          {data.others && data.others.length>0 && <div style={{ marginTop:14, display:'flex', flexWrap:'wrap', alignItems:'baseline', gap:'4px 8px' }}>
-            <span style={{ fontFamily:'var(--mono)', fontSize:10, color:T.ink3, letterSpacing:'.12em', textTransform:'uppercase' }}>Also works</span>
-            <span style={{ fontSize:14.5, color:T.ink, fontWeight:620 }}>{data.others.slice(0,2).map(o=>o.grape).join('  ·  ')}</span>
-          </div>}
-          </>}
-
-          <AvoidNote text={data.avoidNote}/>
-
-          {/* Quiet enrichment status: the answer above is already complete and
-              usable; this only says research is still looking for supporting
-              sources. It resolves silently — never into a different answer. */}
-          {data.pendingResearch && <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:8 }}>
-            <Spinner size={13} stroke={2}/>
-            <span style={{ fontSize:11.5, color:T.ink4 }}>Checking public wine sources…</span>
-          </div>}
-
-          {/* In your cellar — kept visually distinct from what to buy */}
-          {!data.guidedTonight && !cellarLead && <div style={{ marginTop:20, paddingTop:18, borderTop:`2px solid ${T.line2}` }}>
-            <div style={{ display:'flex', alignItems:'baseline', gap:9, marginBottom:11 }}>
-              <span style={{ fontSize:16.5, fontWeight:740, letterSpacing:-0.35 }}>In your cellar</span>
-              <span style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3 }}>{data.owned.length ? `${data.owned.length} match${data.owned.length>1?'es':''}` : 'nothing matching'}</span>
-            </div>
-            {data.owned.length
-              ? data.owned.map(w=> <OwnedRow key={w.id} w={w} onOpen={onOpen}/>)
-              : <div style={{ padding:'14px', border:`1px dashed ${T.line2}`, borderRadius:12, background:T.canvas, fontSize:13.5, color:T.ink2, lineHeight:1.5 }}>Nothing here fits this one — the shelf guidance above is what to buy.</div>}
-          </div>}
-
-          {/* Follow up without starting over: taps and typed challenges take the
-              same path — on the guided tonight answer too. */}
-          <FollowUpBar data={data} onAsk={(v)=>run(v)} onFocusInput={focusInput}/>
-
-          {data.guidedTonight && <button onClick={()=>{ setGuideMeal(null); setPending({ id:'tonight-meal', original:asked, intent:'cellar' }); setPhase('guide-meal'); }} style={{ width:'100%', marginTop:18, padding:'12px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, cursor:'pointer' }}>Change the meal or mood</button>}
-
-          {/* Depth, behind one control */}
-          {!data.guidedTonight && <button onClick={()=>setShowWhy(v=>!v)} style={{ marginTop:20, background:'none', border:'none', padding:0, cursor:'pointer',
-            display:'inline-flex', alignItems:'center', gap:6, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, color:T.ink2 }}>
-            <Icon name={showWhy?'x':'sparkle'} size={14} color={T.ink2}/>{showWhy ? 'Hide the detail' : 'The detail'}
-          </button>}
-
-          {!data.guidedTonight && showWhy && <div style={{ marginTop:12 }}>
-            {data.primary.deeper && <div style={{ padding:'14px 16px', background:`hsl(${typeHue(data.owned&&data.owned[0]?data.owned[0].type:'Red')} 30% 97%)`, border:`1px solid ${T.line}`, borderRadius:13 }}>
-              <div style={{ fontSize:15.5, fontWeight:700, color:T.ink, letterSpacing:-0.25 }}>{data.primary.deeperTitle}</div>
-              <div style={{ fontSize:14, color:T.ink2, lineHeight:1.55, marginTop:5 }}>{data.primary.deeper}</div>
-            </div>}
-            {data.others && data.others.length>0 && <div style={{ marginTop:18 }}>
-              <div style={{ fontSize:15.5, fontWeight:720, letterSpacing:-0.3, marginBottom:2 }}>How the alternatives differ</div>
-              {data.others.slice(0,2).map((o,i)=> <StyleNote key={i} grape={o.grape} why={o.why} direction={o.direction}/>)}
-            </div>}
-            <BasisLine basis={pairingBasis(data)} sources={data.sources}/>
-          </div>}
-
-          {/* learning */}
-          {!data.guidedTonight && insightGrape && <div style={{ marginTop:22, display:'flex', gap:10, padding:'13px 14px', background:T.buyBg, borderRadius:12 }}>
-            <Icon name="sparkle" size={16} color={T.buy}/>
-            <span style={{ fontSize:13, color:T.buy, lineHeight:1.45, fontWeight:560 }}>We’re learning your taste: you mark <b>{insightGrape}</b> “Buy Again” most often.</span>
-          </div>}
-
-          {/* save pairing */}
-          {onSavePairing && <button onClick={savePairing} disabled={saved} style={{ width:'100%', marginTop:20, padding:'15px', borderRadius:13, border:'none', cursor:saved?'default':'pointer',
-            background:saved?T.buyBg:T.ink, color:saved?T.buy:'#fff', fontFamily:'var(--sans)', fontSize:15, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-            <Icon name={saved?'check':'heart'} size={18} color={saved?T.buy:'#fff'} stroke={saved?3:1.8}/>{saved?'Saved to My Palate':'Save this pairing'}</button>}
-
-          <button onClick={startNew} style={{ width:'100%', marginTop:10, padding:'13px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:14, fontWeight:600, cursor:'pointer' }}>New question</button>
-        </>}
+      {/* Quick replies + composer, like a chat */}
+      <div style={{ flexShrink:0, borderTop:`1px solid ${T.line}`, background:'#fff', padding:'8px 12px', paddingBottom:'calc(10px + env(safe-area-inset-bottom))' }}>
+        {showingAnswer && <FollowUpBar data={data} onAsk={(v)=>run(v)}/>}
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <div style={{ flex:1, display:'flex', alignItems:'center', gap:9, background:T.raised, border:`1.5px solid ${q?T.ink:T.line}`, borderRadius:14, padding:'0 12px', height:46 }}>
+            <Icon name="sparkle" size={16} color={T.maybe}/>
+            <input ref={inputRef} autoFocus value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') run(); }}
+              placeholder={pending ? 'Type your answer…' : inConversation ? 'Ask a follow-up, or something new…' : 'Ask your sommelier…'}
+              style={{ flex:1, border:'none', outline:'none', background:'transparent', fontFamily:'var(--sans)', fontSize:15.5, color:T.ink }}/>
+            {q && <button aria-label="Clear" onClick={()=>{ setQ(''); focusInput(); }} style={{ background:'none', border:'none', cursor:'pointer', padding:4, display:'flex' }}><Icon name="x" size={15} color={T.ink3}/></button>}
+          </div>
+          <button aria-label="Send" onClick={()=>run()} disabled={!q.trim()} style={{ width:46, height:46, borderRadius:99, border:'none', background:q.trim()?T.ink:T.raised, cursor:q.trim()?'pointer':'default', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <Icon name="arrow" size={20} color={q.trim()?'#fff':T.ink4} stroke={2.2}/>
+          </button>
+        </div>
       </div>
     </div>
   );
+}
+
+// ── Chat pieces ─────────────────────────────────────────────────────
+function UserBubble({ text }){
+  return <div style={{ display:'flex', justifyContent:'flex-end', margin:'4px 0 12px' }}>
+    <div style={{ maxWidth:'82%', background:T.ink, color:'#fff', borderRadius:'16px 16px 4px 16px', padding:'10px 14px', fontSize:14.5, lineHeight:1.45 }}>{text}</div>
+  </div>;
+}
+function SommelierBubble({ children }){
+  return <div style={{ margin:'4px 0 16px' }}>
+    <SommelierMark/>
+    <div>{children}</div>
+  </div>;
+}
+
+// The pairing answer as a card. `live` is the newest answer: it carries the
+// save button and the guided "change the meal" control; earlier answers in
+// the thread stay readable but quiet.
+function PairingCard({ data, live, onOpen, saved, onSave, onChangeMeal, wines }){
+  const [showWhy, setShowWhy] = pUS(false);
+  const cellarLead = (data.guidedTonight || data.leadWithCellar) && data.owned && data.owned.length>0;
+  const insightGrape = live ? relevantBuyAgainGrape(wines, data) : null;
+  return <>
+    {data.adjusted==='color' && <div style={{ fontFamily:'var(--mono)', fontSize:10, color:T.ink3, letterSpacing:'.12em', textTransform:'uppercase', marginBottom:10 }}>Switched to a {({red:'red',white:'white',rose:'rosé',sparkling:'sparkling',fortified:'fortified'})[data.swappedTo]||data.swappedTo} for {data.dish}</div>}
+    {data.adjusted==='heat' && <div style={{ fontFamily:'var(--mono)', fontSize:10, color:T.ink3, letterSpacing:'.12em', textTransform:'uppercase', marginBottom:10 }}>Adjusted for the heat</div>}
+
+    {cellarLead && <>
+      <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.maybe, letterSpacing:'.13em', textTransform:'uppercase', marginBottom:9 }}>{data.guidedTonight ? 'Tonight’s bottle' : 'Open this one'}</div>
+      <OwnedRow w={data.owned[0]} onOpen={onOpen}/>
+      <div style={{ fontSize:14, color:T.ink2, lineHeight:1.5, marginTop:5 }}>{data.tonightReason || bottleReason(data.owned[0], data)}</div>
+      {data.owned.length>1 && <div style={{ marginTop:20 }}>
+        <div style={{ fontSize:15.5, fontWeight:720, letterSpacing:-0.3, marginBottom:9 }}>{data.owned.length>2 ? 'Two other good choices' : 'Another good choice'}</div>
+        {data.owned.slice(1,3).map(w=><div key={w.id} style={{ marginBottom:12 }}>
+          <div style={{ fontFamily:'var(--mono)', fontSize:9.5, color:T.maybe, letterSpacing:'.11em', textTransform:'uppercase', marginBottom:5 }}>{alternativeDirection(data.owned[0],w)}</div>
+          <OwnedRow w={w} onOpen={onOpen}/>
+        </div>)}
+      </div>}
+    </>}
+    {(data.guidedTonight || data.leadWithCellar) && !(data.owned||[]).length && <div style={{ marginBottom:16, padding:'13px 14px', border:`1px dashed ${T.line2}`, borderRadius:12, background:T.canvas, fontSize:13.5, color:T.ink2, lineHeight:1.5 }}>
+      Nothing you currently own fits closely enough. Here is the style to look for instead.
+    </div>}
+
+    {/* ── The ten-second block ──────────────────────────────────
+        Recommendation before explanation. Everything a hurried shopper
+        needs to locate a bottle sits above this fold; depth is behind
+        "The detail". */}
+    {(!data.guidedTonight || !(data.owned||[]).length) && <>
+    {data.leadWithCellar && (data.owned||[]).length>0 && <div style={{ fontSize:15.5, fontWeight:740, letterSpacing:-0.35, marginTop:22, marginBottom:6, paddingTop:18, borderTop:`2px solid ${T.line2}` }}>If you buy instead</div>}
+    {pairingHeadline(data) && <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.maybe, letterSpacing:'.13em', textTransform:'uppercase', marginBottom:10 }}>{pairingHeadline(data)}</div>}
+    <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.ink3, letterSpacing:'.14em', textTransform:'uppercase' }}>Look for</div>
+    <div style={{ fontSize:30, fontWeight:790, letterSpacing:-0.9, color:T.ink, lineHeight:1.05, marginTop:4 }}>{data.primary.grape}</div>
+
+    {data.primary.deeperTitle && <div style={{ marginTop:12 }}>
+      <span style={{ fontFamily:'var(--mono)', fontSize:10, color:T.maybe, letterSpacing:'.12em', textTransform:'uppercase' }}>Best bet</span>
+      <div style={{ fontSize:16.5, fontWeight:700, color:T.ink, letterSpacing:-0.3, marginTop:3 }}>{data.primary.deeperTitle}</div>
+    </div>}
+
+    {data.primary.bottle && <div style={{ marginTop:14, padding:'12px 14px', border:`1px solid ${T.buy}`, background:T.buyBg, borderRadius:12 }}>
+      <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.13em', textTransform:'uppercase', color:T.buy }}>Source-verified bottle</div>
+      <div style={{ fontSize:15.5, fontWeight:720, color:T.ink, marginTop:4 }}>{data.primary.bottle}</div>
+    </div>}
+
+    <div style={{ fontSize:14.5, color:T.ink2, lineHeight:1.5, marginTop:8 }}>{data.primary.why}</div>
+
+    {/* On the shelf — the exact words to look for */}
+    {(data.primary.lookFor||[]).length>0 && <div style={{ marginTop:14, padding:'12px 14px', background:T.canvas, border:`1px solid ${T.line}`, borderRadius:12 }}>
+      <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.13em', textTransform:'uppercase', color:T.ink3, marginBottom:7 }}>On the label</div>
+      <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+        {data.primary.lookFor.slice(0,3).map((t,i)=>(
+          <div key={i} style={{ display:'flex', gap:8, fontSize:13, color:T.ink2, lineHeight:1.4 }}>
+            <span style={{ flexShrink:0, width:4, height:4, borderRadius:99, background:T.ink4, marginTop:6 }}/><span>{t}</span>
+          </div>
+        ))}
+      </div>
+    </div>}
+
+    {/* Also works — one line, never a second essay */}
+    {data.others && data.others.length>0 && <div style={{ marginTop:14, display:'flex', flexWrap:'wrap', alignItems:'baseline', gap:'4px 8px' }}>
+      <span style={{ fontFamily:'var(--mono)', fontSize:10, color:T.ink3, letterSpacing:'.12em', textTransform:'uppercase' }}>Also works</span>
+      <span style={{ fontSize:14.5, color:T.ink, fontWeight:620 }}>{data.others.slice(0,2).map(o=>o.grape).join('  ·  ')}</span>
+    </div>}
+    </>}
+
+    <AvoidNote text={data.avoidNote}/>
+
+    {/* Quiet enrichment status: the answer above is already complete and
+        usable; this only says research is still looking for supporting
+        sources. It resolves silently — never into a different answer. */}
+    {live && data.pendingResearch && <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:8 }}>
+      <Spinner size={13} stroke={2}/>
+      <span style={{ fontSize:11.5, color:T.ink4 }}>Checking public wine sources…</span>
+    </div>}
+
+    {/* In your cellar — kept visually distinct from what to buy */}
+    {!data.guidedTonight && !cellarLead && <div style={{ marginTop:20, paddingTop:18, borderTop:`2px solid ${T.line2}` }}>
+      <div style={{ display:'flex', alignItems:'baseline', gap:9, marginBottom:11 }}>
+        <span style={{ fontSize:16.5, fontWeight:740, letterSpacing:-0.35 }}>In your cellar</span>
+        <span style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3 }}>{(data.owned||[]).length ? `${data.owned.length} match${data.owned.length>1?'es':''}` : 'nothing matching'}</span>
+      </div>
+      {(data.owned||[]).length
+        ? data.owned.map(w=> <OwnedRow key={w.id} w={w} onOpen={onOpen}/>)
+        : <div style={{ padding:'14px', border:`1px dashed ${T.line2}`, borderRadius:12, background:T.canvas, fontSize:13.5, color:T.ink2, lineHeight:1.5 }}>Nothing here fits this one — the shelf guidance above is what to buy.</div>}
+    </div>}
+
+    {live && data.guidedTonight && <button onClick={onChangeMeal} style={{ width:'100%', marginTop:18, padding:'12px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, cursor:'pointer' }}>Change the meal or mood</button>}
+
+    {/* Depth, behind one control */}
+    {!data.guidedTonight && <button onClick={()=>setShowWhy(v=>!v)} style={{ marginTop:18, background:'none', border:'none', padding:0, cursor:'pointer',
+      display:'inline-flex', alignItems:'center', gap:6, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, color:T.ink2 }}>
+      <Icon name={showWhy?'x':'sparkle'} size={14} color={T.ink2}/>{showWhy ? 'Hide the detail' : 'The detail'}
+    </button>}
+
+    {!data.guidedTonight && showWhy && <div style={{ marginTop:12 }}>
+      {data.primary.deeper && <div style={{ padding:'14px 16px', background:`hsl(${typeHue(data.owned&&data.owned[0]?data.owned[0].type:'Red')} 30% 97%)`, border:`1px solid ${T.line}`, borderRadius:13 }}>
+        <div style={{ fontSize:15.5, fontWeight:700, color:T.ink, letterSpacing:-0.25 }}>{data.primary.deeperTitle}</div>
+        <div style={{ fontSize:14, color:T.ink2, lineHeight:1.55, marginTop:5 }}>{data.primary.deeper}</div>
+      </div>}
+      {data.others && data.others.length>0 && <div style={{ marginTop:18 }}>
+        <div style={{ fontSize:15.5, fontWeight:720, letterSpacing:-0.3, marginBottom:2 }}>How the alternatives differ</div>
+        {data.others.slice(0,2).map((o,i)=> <StyleNote key={i} grape={o.grape} why={o.why} direction={o.direction}/>)}
+      </div>}
+      <BasisLine basis={pairingBasis(data)} sources={data.sources}/>
+    </div>}
+
+    {/* learning */}
+    {live && !data.guidedTonight && insightGrape && <div style={{ marginTop:20, display:'flex', gap:10, padding:'13px 14px', background:T.buyBg, borderRadius:12 }}>
+      <Icon name="sparkle" size={16} color={T.buy}/>
+      <span style={{ fontSize:13, color:T.buy, lineHeight:1.45, fontWeight:560 }}>We’re learning your taste: you mark <b>{insightGrape}</b> “Buy Again” most often.</span>
+    </div>}
+
+    {/* save pairing */}
+    {live && onSave && <button onClick={onSave} disabled={saved} style={{ width:'100%', marginTop:18, padding:'14px', borderRadius:13, border:'none', cursor:saved?'default':'pointer',
+      background:saved?T.buyBg:T.ink, color:saved?T.buy:'#fff', fontFamily:'var(--sans)', fontSize:15, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+      <Icon name={saved?'check':'heart'} size={18} color={saved?T.buy:'#fff'} stroke={saved?3:1.8}/>{saved?'Saved to My Palate':'Save this pairing'}</button>}
+  </>;
+}
+
+function WrittenCard({ data }){
+  return <>
+    <AnswerText text={data.text}/>
+    <BasisLine basis={data.basis} sources={data.sources}/>
+  </>;
+}
+
+function ExplanationCard({ data, live, onAsk, onCheckSources, onBackToRecommendation }){
+  return <>
+    <AnswerText text={data.text}/>
+    {(data.sources||[]).length>0 && <div style={{ marginTop:14, padding:'12px 14px', background:T.canvas, border:`1px solid ${T.line}`, borderRadius:12 }}>
+      <div style={{ fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'.13em', textTransform:'uppercase', color:T.ink3, marginBottom:7 }}>Sources used</div>
+      <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+        {data.sources.map((s,i)=><a key={i} href={s.url} target="_blank" rel="noopener noreferrer" style={{ fontSize:13, color:T.ink2, lineHeight:1.4 }}>{s.title}</a>)}
+      </div>
+    </div>}
+    <Factors factors={data.factors}/>
+    {live && data.offerResearch && <button onClick={onCheckSources} style={{ marginTop:14, padding:'10px 14px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:640, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:7 }}><Icon name="search" size={14} color={T.ink}/>Check public sources</button>}
+    {live && (data.choices||[]).length>0 && <div style={{ marginTop:14, display:'flex', flexWrap:'wrap', gap:7 }}>
+      {data.choices.map((c)=><button key={c.label} onClick={()=> c.value==='__research' ? onCheckSources() : onAsk(c.value)}
+        style={{ padding:'7px 12px', borderRadius:99, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:12.5, fontWeight:560, cursor:'pointer' }}>{c.label}</button>)}
+    </div>}
+    <BasisLine basis={data.basis} sources={[]}/>
+    {live && onBackToRecommendation && <button onClick={onBackToRecommendation} style={{ marginTop:14, padding:'9px 14px', borderRadius:99, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:12.5, fontWeight:620, cursor:'pointer' }}>Back to the recommendation</button>}
+  </>;
+}
+
+function CellarCard({ data, live, onOpen, onShowShelf }){
+  const picks = data.picks;
+  if (!picks) return null;
+  return <>
+    <div style={{ fontFamily:'var(--mono)', fontSize:10.5, color:T.maybe, letterSpacing:'.13em', textTransform:'uppercase', marginBottom:9 }}>From your cellar{data.pairing?.dish ? ` · ${data.pairing.dish}` : ''}</div>
+    {picks.lead ? <>
+      <OwnedRow w={picks.lead.wine} onOpen={onOpen}/>
+      <div style={{ fontSize:14, color:T.ink2, lineHeight:1.5, marginTop:5 }}>{picks.lead.reason}</div>
+      {picks.alternatives.length>0 && <div style={{ marginTop:20 }}>
+        <div style={{ fontSize:15.5, fontWeight:720, letterSpacing:-0.3, marginBottom:9 }}>{picks.alternatives.length>1 ? 'Two other good choices' : 'Another good choice'}</div>
+        {picks.alternatives.map((a)=><div key={a.wine.id} style={{ marginBottom:12 }}>
+          <div style={{ fontFamily:'var(--mono)', fontSize:9.5, color:T.maybe, letterSpacing:'.11em', textTransform:'uppercase', marginBottom:5 }}>{a.direction}</div>
+          <OwnedRow w={a.wine} onOpen={onOpen}/>
+          <div style={{ fontSize:13, color:T.ink2, lineHeight:1.45, marginTop:-3 }}>{a.reason}</div>
+        </div>)}
+      </div>}
+      <div style={{ fontFamily:'var(--mono)', fontSize:11, color:T.ink3, marginTop:6 }}>{picks.count} fitting wine{picks.count>1?'s':''} in your cellar · samples excluded</div>
+    </> : <div style={{ padding:'14px', border:`1px dashed ${T.line2}`, borderRadius:12, background:T.canvas, fontSize:13.5, color:T.ink2, lineHeight:1.5 }}>{picks.note}</div>}
+    {live && <button onClick={onShowShelf} style={{ width:'100%', marginTop:16, padding:'12px', borderRadius:11, border:`1px solid ${T.line2}`, background:'#fff', color:T.ink2, fontFamily:'var(--sans)', fontSize:13.5, fontWeight:620, cursor:'pointer' }}>{picks.lead ? 'Show what to look for if you buy' : 'Show what to look for'}</button>}
+    <BasisLine basis="cellar" sources={[]}/>
+  </>;
 }
 
 export { PairingSearch, DISH_RULES, DEFAULT_RULE, heuristicPairing };

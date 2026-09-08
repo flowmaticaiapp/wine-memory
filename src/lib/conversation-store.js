@@ -245,6 +245,13 @@ function validTurn(t){
   if (typeof t.intent === 'string' && INTENTS.includes(t.intent)) out.intent = t.intent;
   if (typeof t.mode === 'string') out.mode = t.mode.slice(0, 24);
   if (typeof t.followUp === 'string') out.followUp = t.followUp.slice(0, 24);
+  // A sommelier turn may carry its full answer (so the thread can show earlier
+  // answers); it passes through the same deep sanitiser, and is dropped —
+  // not the turn — when it fails.
+  if (t.role === 'sommelier' && t.data != null){
+    const data = sanitizeAnswer(t.data);
+    if (data) out.data = data;
+  }
   return out;
 }
 
@@ -302,7 +309,7 @@ export function writeConversation(userId, conversation, storage, now = Date.now(
   if (!store || !key || !conversation) return;
   const bounded = {
     v: VERSION, at: now,
-    turns: (conversation.turns || []).slice(-MAX_TURNS),
+    turns: (conversation.turns || []).slice(-MAX_TURNS).map(validTurn).filter(Boolean),
     context: sanitizeContext(conversation.context || {}) || {},
     current: conversation.current
       ? { asked: str(conversation.current.asked) || '', data: sanitizeAnswer(conversation.current.data),
@@ -340,6 +347,8 @@ export function appendAnswer(conv, { asked, summary, data, intent, effectiveQuer
   const turn = { role:'sommelier', at: now, text: String(summary ?? '').slice(0, MAX_TEXT) };
   if (mode) turn.mode = mode;
   if (followUp) turn.followUp = followUp;
+  const cleanData = sanitizeAnswer(data);
+  if (cleanData) turn.data = cleanData;
   const current = { asked: String(asked ?? ''), data };
   if (intent) current.intent = intent;
   if (effectiveQuery) current.effectiveQuery = effectiveQuery;
